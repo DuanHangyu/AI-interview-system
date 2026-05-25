@@ -191,7 +191,7 @@ public class GeminiManager {
             你是一名专业的大学考核教授。你需要根据学生的答辩内容和考核标准，现场生成针对性的考核问题。
 
             要求：
-            1. 仔细阅读学生的答辩内容（口述转写文本）和上传的答辩文档
+            1. 仔细阅读学生的答辩内容（口述转写文本）和已解析的考试材料上下文
             2. 根据考核标准识别所有考核维度
             3. 按维度均匀分配题目数量，确保每个维度都有涉及
             4. 题目必须针对学生答辩中的实际内容、论点和表述来提问
@@ -232,7 +232,7 @@ public class GeminiManager {
             """;
 
     @Retryable(retryFor = RuntimeException.class)
-    public String generateLiveQuestions(String defenseContent, List<byte[]> documentFiles,
+    public String generateLiveQuestions(String defenseContent, String materialContext,
                                          String criteria, String requirements, int questionCount) {
         String uuid = java.util.UUID.randomUUID().toString();
         long start = System.currentTimeMillis();
@@ -245,6 +245,9 @@ public class GeminiManager {
                 【考核要求】
                 %s
 
+                【考试材料上下文】
+                %s
+
                 【学生答辩内容】
                 %s
 
@@ -252,29 +255,19 @@ public class GeminiManager {
                 %d
 
                 请根据以上信息，按考核维度均匀出题，共 %d 道题。
-                """.formatted(criteria, requirements, defenseContent, questionCount, questionCount);
+                """.formatted(criteria, requirements,
+                StringUtils.defaultIfBlank(materialContext, "无"),
+                StringUtils.defaultIfBlank(defenseContent, "无"),
+                questionCount, questionCount);
 
         try {
-            String text;
-            if (documentFiles != null && !documentFiles.isEmpty()) {
-                List<OpenAiManager.FileInput> fileInputs = documentFiles.stream()
-                        .map(f -> new OpenAiManager.FileInput(f, "application/pdf"))
-                        .toList();
-                text = openAiManager.chatCompletionWithFiles(
-                        openAiManager.getTextModel(),
-                        LIVE_QUESTION_SYSTEM_PROMPT,
-                        userPrompt,
-                        fileInputs
-                );
-            } else {
-                text = openAiManager.chatCompletionWithSchema(
-                        openAiManager.getTextModel(),
-                        LIVE_QUESTION_SYSTEM_PROMPT,
-                        userPrompt,
-                        "live_questions",
-                        LIVE_QUESTION_SCHEMA
-                );
-            }
+            String text = openAiManager.chatCompletionWithSchema(
+                    openAiManager.getTextModel(),
+                    LIVE_QUESTION_SYSTEM_PROMPT,
+                    userPrompt,
+                    "live_questions",
+                    LIVE_QUESTION_SCHEMA
+            );
             log.info("generateLiveQuestions uuid:{}, time:{}, result length:{}", uuid, System.currentTimeMillis() - start, text.length());
             return text;
         } catch (Exception e) {
@@ -395,6 +388,18 @@ public class GeminiManager {
             throw new RuntimeException("PDF内容提取失败，请重新尝试");
         }
         return text;
+    }
+
+    @Retryable(retryFor = RuntimeException.class)
+    public AssessmentEvaluationDTO summaryAnalysis(String systemPrompt, String prompt,
+                                                    String materialContext, String schemaType) {
+        String promptWithMaterial = """
+                【考试材料上下文】
+                %s
+
+                %s
+                """.formatted(StringUtils.defaultIfBlank(materialContext, "无"), prompt);
+        return summaryAnalysis(systemPrompt, promptWithMaterial, List.of(), schemaType);
     }
 
     @Retryable(retryFor = RuntimeException.class)

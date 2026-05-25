@@ -89,6 +89,8 @@ public class StudentAssessmentService {
 
     private final GeminiManager geminiManager;
 
+    private final AssessmentMaterialService assessmentMaterialService;
+
     private final TtsManager ttsManager;
 
     private final ThreadPoolExecutor threadPoolExecutor;
@@ -702,13 +704,13 @@ public class StudentAssessmentService {
                     defenseContent = recordOp.get().getDefenseContent();
                 }
 
-                // 获取答辩文档
-                List<byte[]> documentFiles = buildSystemFile(setting);
+                // 获取老师上传 PDF 的预解析材料，避免每个学生重复下载、上传和解析 PDF。
+                String materialContext = assessmentMaterialService.getOrParseMaterialContext(setting);
 
                 // 调用 AI 生成现场题目
                 String result = geminiManager.generateLiveQuestions(
                         defenseContent,
-                        documentFiles,
+                        materialContext,
                         setting.getAssessmentCriteria(),
                         setting.getAssessmentRequirements(),
                         setting.getQuestionCount()
@@ -911,8 +913,8 @@ public class StudentAssessmentService {
             schemaType = "defense";
         }
         log.info("endAssessment prompt:{}", question);
-        List<byte[]> bytes = buildSystemFile(setting);
-        AssessmentEvaluationDTO results = geminiManager.summaryAnalysis(buildSummarySystemInstruction(setting), question.toString(), bytes, schemaType);
+        String materialContext = assessmentMaterialService.getOrParseMaterialContext(setting);
+        AssessmentEvaluationDTO results = geminiManager.summaryAnalysis(buildSummarySystemInstruction(setting), question.toString(), materialContext, schemaType);
         recordService.update(Wrappers.lambdaUpdate(StudentAssessmentRecordPO.class)
                 .set(StudentAssessmentRecordPO::getDefenseResult, JSONUtil.toJsonStr(results))
                 .set(StudentAssessmentRecordPO::getState, 1)
@@ -1211,20 +1213,6 @@ public class StudentAssessmentService {
                 .id(record.getId())
                 .studentName(student.getName())
                 .build();
-    }
-
-    private List<byte[]> buildSystemFile(AssessmentSettingPO setting) {
-        long start = System.currentTimeMillis();
-        try {
-            String assessmentFiles = setting.getAssessmentFiles();
-            log.info("buildSystemFile files:{}", assessmentFiles);
-            List<FileDTO> list = JSONUtil.toList(assessmentFiles, FileDTO.class);
-            return list.stream()
-                    .map(item -> httpUtils.downloadFile(item.getFileUrl()).getBytes())
-                    .toList();
-        } finally {
-            log.info("buildSystemFile consumer:{}, settingId:{}", System.currentTimeMillis() - start, setting.getId());
-        }
     }
 
     private String buildGenerateQuestionSystemInstruction() {

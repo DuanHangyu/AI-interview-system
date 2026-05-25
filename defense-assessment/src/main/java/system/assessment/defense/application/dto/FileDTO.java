@@ -25,4 +25,16 @@ public class FileDTO {
 
     @Schema(description = "分辨率")
     private String resolution;
+
+    @Schema(description = "材料解析状态")
+    private String materialStatus;
+
+    @Schema(description = "材料解析文本")
+    private String materialText;
+
+    @Schema(description = "材料解析错误")
+    private String materialError;
+
+    @Schema(description = "材料解析时间戳")
+    private Long materialParsedAt;
 }

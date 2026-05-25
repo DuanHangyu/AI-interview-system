@@ -1,6 +1,7 @@
 package system.assessment.defense.application.service;
 
 import cn.hutool.json.JSONUtil;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,6 +16,9 @@ import system.assessment.defense.infrastructure.repository.dao.service.Assessmen
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -38,10 +42,17 @@ class AssessmentMaterialServiceTest {
     private AssessmentSettingService settingService;
 
     private AssessmentMaterialService materialService;
+    private ThreadPoolExecutor threadPoolExecutor;
 
     @BeforeEach
     void setUp() {
-        materialService = new AssessmentMaterialService(httpUtils, openAiManager, settingService);
+        threadPoolExecutor = new ThreadPoolExecutor(1, 1, 1, TimeUnit.SECONDS, new ArrayBlockingQueue<>(1));
+        materialService = new AssessmentMaterialService(httpUtils, openAiManager, settingService, threadPoolExecutor);
+    }
+
+    @AfterEach
+    void tearDown() {
+        threadPoolExecutor.shutdownNow();
     }
 
     @Test
