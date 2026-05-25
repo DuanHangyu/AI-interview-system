@@ -4,6 +4,8 @@ import { mittEmit } from "@/utils/appMitt";
 
 export function useSpeechRecognition() {
   const transcriptionText = ref("");
+  const audioReady = ref(false);
+  const audioError = ref("");
   let ws = ref(null);
   let audioContext = null;
   let micNode = null;
@@ -46,7 +48,10 @@ export function useSpeechRecognition() {
       sendInterval = setInterval(() => {
         flushAudioChunks();
       }, 100);
+      return true;
     }
+    audioError.value = "录音服务连接失败，请检查网络后重试";
+    return false;
   }
 
   function flushAudioChunks() {
@@ -209,6 +214,8 @@ export function useSpeechRecognition() {
 
   async function doInitAudio() {
     try {
+      audioError.value = "";
+      audioReady.value = false;
       manuallyClosed = false;
       audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
       // { sampleRate: 16000 }
@@ -244,6 +251,8 @@ export function useSpeechRecognition() {
       ws.value = socket;
 
       socket.onopen = () => {
+        audioReady.value = true;
+        audioError.value = "";
         startHeartbeat();
       };
 
@@ -260,6 +269,8 @@ export function useSpeechRecognition() {
       };
 
       socket.onerror = (e) => {
+        audioReady.value = false;
+        audioError.value = "录音服务连接异常，请检查网络后重试";
         console.error("WebSocket error", e);
       };
 
@@ -274,13 +285,18 @@ export function useSpeechRecognition() {
         if (ws.value === socket) {
           ws.value = null;
         }
+        audioReady.value = false;
 
         if (!manuallyClosed) {
           scheduleReconnect(shouldResumeStreaming);
         }
       };
+      return true;
     } catch (err) {
+      audioReady.value = false;
+      audioError.value = "无法打开麦克风，请允许浏览器麦克风权限后重试";
       console.error("麦克风打开失败：", err);
+      return false;
     }
   }
 
@@ -339,5 +355,7 @@ export function useSpeechRecognition() {
     stopHeartbeat,
     restartAudio,
     volumeLevel,
+    audioReady,
+    audioError,
   };
 }

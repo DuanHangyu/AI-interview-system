@@ -59,6 +59,8 @@ public class StudentAssessmentService {
 
     private static final Map<Integer, ByteArrayOutputStream> VOICE_MAP = new ConcurrentHashMap<>();
 
+    private static final int MIN_VALID_AUDIO_BYTES = 2048;
+
     // 现场生成的题目缓存 key: studentId:assessmentId
     private static final Map<String, List<LiveQuestion>> LIVE_QUESTION_MAP = new ConcurrentHashMap<>();
     // 追问缓存 key: studentId:assessmentId:questionIndex
@@ -122,6 +124,10 @@ public class StudentAssessmentService {
                 .filter(Objects::nonNull)
                 .mapToInt(Integer::intValue)
                 .sum();
+    }
+
+    static boolean hasValidAudio(ByteArrayOutputStream byteArrayOutputStream) {
+        return byteArrayOutputStream != null && byteArrayOutputStream.size() >= MIN_VALID_AUDIO_BYTES;
     }
 
     private static LiveQuestion buildFallbackLiveQuestion(int index) {
@@ -1075,6 +1081,11 @@ public class StudentAssessmentService {
             consumer.accept(WebSocketResponse.ofLast("未找到录音数据"));
             return;
         }
+        if (!hasValidAudio(byteArrayOutputStream)) {
+            VOICE_MAP.remove(studentId);
+            consumer.accept(WebSocketResponse.ofError("未检测到有效录音，请重新回答"));
+            return;
+        }
         String currentQuestionKey = RedisConstants.STUDENT_QUESTION.formatted(studentId, assessmentId);
         String generatedQuestionString = (String) redisTemplate.opsForValue().get(currentQuestionKey);
         if (generatedQuestionString == null) {
@@ -1323,6 +1334,11 @@ public class StudentAssessmentService {
         ByteArrayOutputStream byteArrayOutputStream = VOICE_MAP.get(studentId);
         if (byteArrayOutputStream == null) {
             consumer.accept(WebSocketResponse.ofLast("未找到录音数据"));
+            return;
+        }
+        if (!hasValidAudio(byteArrayOutputStream)) {
+            VOICE_MAP.remove(studentId);
+            consumer.accept(WebSocketResponse.ofError("未检测到有效录音，请重新答辩"));
             return;
         }
         byte[] bytes = addWavHeader(byteArrayOutputStream.toByteArray());

@@ -5,6 +5,7 @@ import cn.hutool.json.JSONUtil;
 import org.junit.jupiter.api.Test;
 import system.assessment.defense.application.dto.ValueDTO;
 
+import java.io.ByteArrayOutputStream;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,5 +43,19 @@ class StudentAssessmentServiceTest {
         assertThat(StudentAssessmentService.resolveDisplayScore(null, values)).isEqualTo(30);
         assertThat(StudentAssessmentService.resolveDisplayScore(0, values)).isEqualTo(30);
         assertThat(StudentAssessmentService.resolveDisplayScore(25, values)).isEqualTo(25);
+    }
+
+    @Test
+    void rejectsEmptyOrTinyAudioPayloads() {
+        ByteArrayOutputStream emptyAudio = new ByteArrayOutputStream();
+        ByteArrayOutputStream tinyAudio = new ByteArrayOutputStream();
+        tinyAudio.writeBytes(new byte[128]);
+        ByteArrayOutputStream validAudio = new ByteArrayOutputStream();
+        validAudio.writeBytes(new byte[2048]);
+
+        assertThat(StudentAssessmentService.hasValidAudio(null)).isFalse();
+        assertThat(StudentAssessmentService.hasValidAudio(emptyAudio)).isFalse();
+        assertThat(StudentAssessmentService.hasValidAudio(tinyAudio)).isFalse();
+        assertThat(StudentAssessmentService.hasValidAudio(validAudio)).isTrue();
     }
 }

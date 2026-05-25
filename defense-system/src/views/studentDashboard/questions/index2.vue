@@ -1,8 +1,8 @@
 <template>
   <main
-    class="size-full px-9 pt-6 pb-8 defense flex flex-col overflow-hidden relative min-w-[1500px]"
+    class="size-full px-4 xl:px-9 pt-6 pb-8 defense flex flex-col overflow-auto relative min-w-[1024px]"
   >
-    <div class="min-w-[1450px] w-full flex-shrink-0">
+    <div class="min-w-[1024px] xl:min-w-[1450px] w-full flex-shrink-0">
       <DefenseHeader class="w-full" />
     </div>
     <div class="flex-grow w-full flex items-center justify-center">
@@ -120,10 +120,29 @@
     </div>
     <!-- 加载遮罩层 -->
     <LoadingOverlay
-      v-if="!isReady || !isVoiceReady || !isConnected || isGenQuestion"
-      :text="'正在加载中，请稍后...'"
+      v-if="showLoading"
+      :text="loadingText"
       :bg="isFirstShow ? 'rgba(95, 90, 87, 1)' : 'rgba(95, 90, 87, 0.8)'"
     />
+    <div
+      v-if="blockingError"
+      class="absolute inset-0 z-50 flex items-center justify-center bg-[rgba(95,90,87,0.86)]"
+    >
+      <div
+        class="w-[460px] max-w-[90vw] rounded-2xl bg-white/95 px-8 py-7 text-center shadow-2xl"
+      >
+        <div class="text-xl font-semibold text-[#1f2937] mb-3">面试连接异常</div>
+        <div class="text-base leading-7 text-[#4b5563] whitespace-pre-line">
+          {{ blockingError }}
+        </div>
+        <button
+          class="mt-6 h-11 px-8 rounded-full bg-[#524fff] text-white text-base font-medium hover:bg-[#3f3cef]"
+          @click="retryBlockedStep"
+        >
+          重试
+        </button>
+      </div>
+    </div>
   </main>
 </template>
 <script setup lang="ts">
@@ -144,14 +163,13 @@ const calcRender = computed(() => (e: string) => {
   return md.render(e);
 });
 const {
-  transcriptionText,
   initAudio,
   startAudio,
   stopAudio,
   closeAudio,
-  startHeartbeat,
-  restartAudio,
   volumeLevel,
+  audioReady,
+  audioError,
 } = useSpeechRecognition();
 const questionContainer = ref();
 
@@ -171,7 +189,16 @@ const isReady = ref(false);
 const isVoiceReady = ref(false);
 const isGenQuestion = ref(false);
 const audioStatus = ref(false);
+const blockingError = ref("");
+const blockedStep = ref<"setup" | "generate" | "answer">("setup");
+const loadingText = ref("正在加载中，请稍后...");
+const showLoading = computed(
+  () =>
+    !blockingError.value &&
+    (!isReady.value || !isVoiceReady.value || !isConnected.value || isGenQuestion.value)
+);
 let voiceFallbackTimer: number | undefined = undefined;
+let generateRetryTimer: number | undefined = undefined;
 
 // 心跳间隔（毫秒）
 const HEARTBEAT_INTERVAL = 5000; // 30秒
@@ -186,6 +213,130 @@ const connectionStatus = ref("Disconnected");
 const pageOff = ref(false);
 
 const isPlaying = ref(false);
+
+function resetLoadingText() {
+  loadingText.value = "正在加载中，请稍后...";
+}
+
+function clearGenerateRetryTimer() {
+  if (generateRetryTimer) {
+    clearTimeout(generateRetryTimer);
+    generateRetryTimer = undefined;
+  }
+}
+
+function setBlockingError(messageText: string, step: "setup" | "generate" | "answer" = "generate") {
+  clearVoiceFallbackTimer();
+  clearGenerateRetryTimer();
+  isGenQuestion.value = false;
+  blockingError.value = messageText;
+  blockedStep.value = step;
+}
+
+function clearBlockingError() {
+  blockingError.value = "";
+  resetLoadingText();
+}
+
+function clearTextHeartbeat() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = undefined;
+  }
+}
+
+function isTextSocketOpen() {
+  return socket.value?.readyState === WebSocket.OPEN;
+}
+
+function sendAssessmentAction(action: string) {
+  if (!isTextSocketOpen()) {
+    setBlockingError("面试连接已断开，请重试连接后继续。", "setup");
+    connect();
+    return false;
+  }
+  socket.value?.send(
+    JSON.stringify({
+      message: route.query?.id,
+      action,
+    })
+  );
+  return true;
+}
+
+function scheduleGenerateRetry() {
+  if (generateRetryTimer) {
+    return;
+  }
+  generateRetryTimer = setTimeout(() => {
+    generateRetryTimer = undefined;
+    if (isConnected.value && isGenQuestion.value && !blockingError.value) {
+      generateQuestions();
+    }
+  }, 2000);
+}
+
+function parseQuestionContent(content: unknown) {
+  if (typeof content !== "string" || !content.includes("title")) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(content);
+    return parsed?.title ? parsed : null;
+  } catch (error) {
+    console.warn("题目消息解析失败", error, content);
+    return null;
+  }
+}
+
+async function restartCurrentAnswer() {
+  clearBlockingError();
+  isGenQuestion.value = false;
+  if (audioStatus.value) {
+    stopAudio();
+    audioStatus.value = false;
+  }
+  const started = await startAudio();
+  if (!started) {
+    setBlockingError(audioError.value || "录音服务连接失败，请检查网络后重试。", "setup");
+    return;
+  }
+  audioStatus.value = true;
+  startAnswerQuestions();
+}
+
+async function retryBlockedStep() {
+  const step = blockedStep.value;
+  clearBlockingError();
+
+  if (step === "setup") {
+    const audioOk = audioReady.value || (await initAudio());
+    if (!audioOk) {
+      setBlockingError(audioError.value || "无法打开麦克风，请允许浏览器麦克风权限后重试。", "setup");
+      return;
+    }
+    const cameraOk = videoStream || (await startCamera());
+    if (!cameraOk) {
+      return;
+    }
+    if (!isConnected.value) {
+      connect();
+    }
+    return;
+  }
+
+  if (step === "answer") {
+    await restartCurrentAnswer();
+    return;
+  }
+
+  isGenQuestion.value = true;
+  if (questionList.value.length === 0) {
+    startAssessment();
+  } else {
+    generateQuestions();
+  }
+}
 
 function clearVoiceFallbackTimer() {
   if (voiceFallbackTimer) {
@@ -221,18 +372,23 @@ const updatePlaying = (e: boolean) => {
   // }
 };
 
-const broadcastingEnd = () => {
+const broadcastingEnd = async () => {
   clearVoiceFallbackTimer();
   if (audioStatus.value) {
     stopAudio();
     audioStatus.value = false;
   }
-  startAudio();
+  const started = await startAudio();
+  if (!started) {
+    setBlockingError(audioError.value || "录音服务连接失败，请检查网络后重试。", "setup");
+    return;
+  }
   audioStatus.value = true;
   startAnswerQuestions();
 };
 
 const connect = () => {
+  clearTextHeartbeat();
   if (socket.value) {
     socket.value?.close();
   }
@@ -248,39 +404,65 @@ const connect = () => {
   connectionStatus.value = "Connecting...";
 
   // 创建 WebSocket 连接
-  socket.value = new WebSocket(
+  const currentSocket = new WebSocket(
     process.env.VUE_APP_BASE_TEXT_WS,
     getToken() || ""
   );
+  socket.value = currentSocket;
 
-  socket.value.onopen = () => {
+  currentSocket.onopen = () => {
+    if (socket.value !== currentSocket) {
+      return;
+    }
     connectionStatus.value = "Connected";
     isConnected.value = true;
     reconnectAttempts.value = 0; // 重置重连计数器
+    clearTextHeartbeat();
     console.log("WebSocket connected");
     heartbeatTimer = setInterval(() => {
-      if (socket.value?.readyState === WebSocket.OPEN) {
-        socket.value.send(JSON.stringify({ action: "ping" }));
+      if (socket.value === currentSocket && currentSocket.readyState === WebSocket.OPEN) {
+        currentSocket.send(JSON.stringify({ action: "ping" }));
       }
     }, HEARTBEAT_INTERVAL);
   };
 
-  socket.value.onmessage = (event) => {
-    const msg = JSON.parse(event.data);
+  currentSocket.onmessage = (event) => {
+    let msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch (error) {
+      console.warn("WebSocket 消息解析失败", error, event.data);
+      return;
+    }
     console.log(msg);
+    const contentText = String(msg?.content || "");
     if (msg?.normalMessage) {
-      if (msg.content == "考核结束") {
+      if (contentText == "考核结束") {
         router.push({
           name: "ResultOverPage",
           query: route.query,
         });
-      } else if (msg?.content?.includes("题目生成完成")) {
+      } else if (contentText.includes("题目生成失败")) {
+        setBlockingError(contentText, "generate");
+        message.error(contentText);
+      } else if (contentText.includes("题目正在生成中")) {
+        loadingText.value = contentText;
+        isGenQuestion.value = true;
+        scheduleGenerateRetry();
+      } else if (contentText.includes("正在生成")) {
+        loadingText.value = contentText;
+        isGenQuestion.value = true;
+      } else if (contentText.includes("题目生成完成")) {
+        clearGenerateRetryTimer();
         generateQuestions();
-      } else if (msg?.content?.includes("title")) {
-          const content = JSON.parse(msg?.content);
+      } else {
+        const content = parseQuestionContent(contentText);
+        if (content) {
           if (content?.title == "结束问答") {
             overAssessment();
           } else {
+            clearBlockingError();
+            clearGenerateRetryTimer();
             isGenQuestion.value = false;
             // if (audioStatus.value) {
             //   stopAudio();
@@ -306,26 +488,39 @@ const connect = () => {
             // startAnswerQuestions();
           }
         }
+      }
     } else {
-      if (msg.content == "考核已完成") {
+      isGenQuestion.value = false;
+      if (contentText == "考核已完成") {
         // router.push({
         //   name: "ResultOverPage",
         //   query: route.query,
         // });
+      } else if (contentText.includes("重新回答") || contentText.includes("录音数据")) {
+        message.error(contentText);
+        blockedStep.value = "answer";
+        restartCurrentAnswer();
       } else {
-        message.error(msg?.content);
+        message.error(contentText);
       }
     }
   };
 
-  socket.value.onerror = (error: any) => {
+  currentSocket.onerror = (error: any) => {
+    if (socket.value !== currentSocket) {
+      return;
+    }
     console.error("WebSocket error:", error);
     connectionStatus.value = "Error: " + error.message;
     attemptReconnect();
     isConnected.value = false;
   };
 
-  socket.value.onclose = () => {
+  currentSocket.onclose = () => {
+    if (socket.value !== currentSocket) {
+      return;
+    }
+    clearTextHeartbeat();
     connectionStatus.value = "Disconnected";
     isConnected.value = false;
     if (!pageOff.value) {
@@ -356,8 +551,11 @@ async function startCamera() {
         videoRef.value.play();
       };
     }
+    return true;
   } catch (err) {
     console.error("摄像头启动失败", err);
+    setBlockingError("无法打开摄像头，请允许浏览器摄像头权限后重试。", "setup");
+    return false;
   }
 }
 function stopCamera() {
@@ -370,12 +568,7 @@ function stopCamera() {
 }
 
 function startAssessment() {
-  socket.value?.send(
-    JSON.stringify({
-      message: route.query?.id,
-      action: "start-assessment",
-    })
-  );
+  return sendAssessmentAction("start-assessment");
 }
 
 function handleQuestionTimeout() {
@@ -392,12 +585,9 @@ function handleQuestionTimeout() {
 }
 
 function startAnswerQuestions() {
-  socket.value?.send(
-    JSON.stringify({
-      message: route.query?.id,
-      action: "start-answer",
-    })
-  );
+  if (!sendAssessmentAction("start-answer")) {
+    return;
+  }
   handleQuestionTimeout();
 }
 
@@ -416,12 +606,9 @@ function endQuestionEarly() {
   clearInterval(answerTimer);
   answerTime.value = detail.value?.answerTime || 60;
   isGenQuestion.value = true;
-  socket.value?.send(
-    JSON.stringify({
-      message: route.query?.id,
-      action: "end-answer",
-    })
-  );
+  if (!sendAssessmentAction("end-answer")) {
+    isGenQuestion.value = false;
+  }
   // if (
   //   questionList.value?.[questionList?.value?.length - 1]?.index ==
   //   detail.value?.questionCount
@@ -445,12 +632,9 @@ function generateQuestions() {
     stopAudio();
     audioStatus.value = false;
   }
-  socket.value?.send(
-    JSON.stringify({
-      message: route.query?.id,
-      action: "generate_question",
-    })
-  );
+  if (!sendAssessmentAction("generate_question")) {
+    isGenQuestion.value = false;
+  }
 }
 
 function overAssessment() {
@@ -460,12 +644,7 @@ function overAssessment() {
     stopAudio();
     audioStatus.value = false;
   }
-  socket.value?.send(
-    JSON.stringify({
-      message: route.query?.id,
-      action: "end-assessment",
-    })
-  );
+  sendAssessmentAction("end-assessment");
   router.push({
     name: "ResultOverPage",
     query: route.query,
@@ -479,9 +658,15 @@ onMounted(() => {
       detail.value = res?.data || {};
       duration.value = res?.data?.duration || 0;
       answerTime.value = res?.data?.answerTime || 0;
-      await initAudio();
-      startHeartbeat();
-      await startCamera();
+      const audioOk = await initAudio();
+      if (!audioOk) {
+        setBlockingError(audioError.value || "无法打开麦克风，请允许浏览器麦克风权限后重试。", "setup");
+        return;
+      }
+      const cameraOk = await startCamera();
+      if (!cameraOk) {
+        return;
+      }
       connect();
     }
   );
@@ -490,16 +675,15 @@ onMounted(() => {
 onUnmounted(() => {
   pageOff.value = true;
   clearVoiceFallbackTimer();
+  clearGenerateRetryTimer();
   stopCamera();
-  // closeAudio();
+  closeAudio();
   clearInterval(answerTimer);
   clearInterval(durationTimer);
   if (socket.value) {
     socket.value.close();
   }
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer);
-  }
+  clearTextHeartbeat();
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
   }
@@ -516,7 +700,9 @@ watch(
     if (ready && voiceReady && status && !isFirst.value) {
       isFirst.value = true;
       isGenQuestion.value = true;
-      startAssessment();
+      if (!startAssessment()) {
+        isFirst.value = false;
+      }
     }
   }
 );
