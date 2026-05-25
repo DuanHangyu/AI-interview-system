@@ -19,6 +19,7 @@ import system.assessment.defense.infrastructure.repository.dao.service.Assessmen
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.StringJoiner;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -30,7 +31,10 @@ public class AssessmentMaterialService {
     public static final String STATUS_READY = "READY";
     public static final String STATUS_FAILED = "FAILED";
 
-    private static final int MAX_CONTEXT_CHARS = 12000;
+    private static final int MAX_CONTEXT_CHARS = 8000;
+    private static final int MAX_MATERIAL_TEXT_CHARS = 1800;
+    private static final int MIN_MATERIAL_TEXT_CHARS = 300;
+    private static final int MAX_ASSESSMENT_FILES_JSON_CHARS = 3500;
     private static final int MAX_ERROR_CHARS = 500;
 
     private static final String MATERIAL_EXTRACT_SYSTEM_PROMPT = """
@@ -95,11 +99,16 @@ public class AssessmentMaterialService {
         }
 
         if (changed) {
-            String assessmentFiles = JSONUtil.toJsonStr(files);
+            String assessmentFiles = serializeFilesForStorage(files);
             setting.setAssessmentFiles(assessmentFiles);
-            settingService.update(new UpdateWrapper<AssessmentSettingPO>()
-                    .set("assessment_files", assessmentFiles)
-                    .eq("id", setting.getId()));
+            try {
+                settingService.update(new UpdateWrapper<AssessmentSettingPO>()
+                        .set("assessment_files", assessmentFiles)
+                        .eq("id", setting.getId()));
+            } catch (Exception e) {
+                log.warn("缓存考试材料失败，不阻断本次出题, assessmentId:{}, jsonLength:{}, error:{}",
+                        setting.getId(), assessmentFiles.length(), e.getMessage());
+            }
         }
 
         return buildMaterialContext(files);
@@ -119,7 +128,7 @@ public class AssessmentMaterialService {
     private boolean needsParsing(FileDTO file) {
         return file != null
                 && StringUtils.isNotBlank(file.getFileUrl())
-                && !StringUtils.equals(file.getMaterialStatus(), STATUS_READY);
+                && !Objects.equals(file.getMaterialStatus(), STATUS_READY);
     }
 
     private void parseFile(FileDTO file) {
@@ -139,7 +148,7 @@ public class AssessmentMaterialService {
                 throw new IllegalStateException("材料解析结果为空");
             }
 
-            file.setMaterialText(StringUtils.abbreviate(materialText.trim(), MAX_CONTEXT_CHARS));
+            file.setMaterialText(StringUtils.abbreviate(materialText.trim(), MAX_MATERIAL_TEXT_CHARS));
             file.setMaterialStatus(STATUS_READY);
             file.setMaterialError(null);
             file.setMaterialParsedAt(System.currentTimeMillis());
@@ -155,7 +164,7 @@ public class AssessmentMaterialService {
         StringJoiner joiner = new StringJoiner("\n\n");
         for (FileDTO file : files) {
             if (file == null
-                    || !StringUtils.equals(file.getMaterialStatus(), STATUS_READY)
+                    || !Objects.equals(file.getMaterialStatus(), STATUS_READY)
                     || StringUtils.isBlank(file.getMaterialText())) {
                 continue;
             }
@@ -163,5 +172,21 @@ public class AssessmentMaterialService {
             joiner.add("【材料文件：" + fileName + "】\n" + file.getMaterialText().trim());
         }
         return StringUtils.abbreviate(joiner.toString(), MAX_CONTEXT_CHARS);
+    }
+
+    private String serializeFilesForStorage(List<FileDTO> files) {
+        String json = JSONUtil.toJsonStr(files);
+        int maxTextChars = MAX_MATERIAL_TEXT_CHARS;
+        while (json.length() > MAX_ASSESSMENT_FILES_JSON_CHARS && maxTextChars > MIN_MATERIAL_TEXT_CHARS) {
+            maxTextChars = Math.max(MIN_MATERIAL_TEXT_CHARS, maxTextChars - 300);
+            for (FileDTO file : files) {
+                if (file == null || !Objects.equals(file.getMaterialStatus(), STATUS_READY)) {
+                    continue;
+                }
+                file.setMaterialText(StringUtils.abbreviate(file.getMaterialText(), maxTextChars));
+            }
+            json = JSONUtil.toJsonStr(files);
+        }
+        return json;
     }
 }
