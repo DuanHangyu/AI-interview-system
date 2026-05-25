@@ -38,47 +38,39 @@ public class WebsocketManager {
     private static final int AUDIO_BITS_PER_SAMPLE = 16;
 
     public static void addTextSession(Integer userId, WebSocketSession session) {
-        TEXT_SESSIONS.put(userId, session);
+        replaceSession(TEXT_SESSIONS, userId, session);
     }
 
     public static void addVoiceSession(Integer userId, WebSocketSession session) {
-        VOICE_SESSIONS.put(userId, session);
+        replaceSession(VOICE_SESSIONS, userId, session);
     }
 
     public static void addVoicePlaySession(Integer userId, WebSocketSession session) {
-        VOICE_PLAY_SESSIONS.put(userId, session);
+        replaceSession(VOICE_PLAY_SESSIONS, userId, session);
     }
+
     public static void removeTextSession(Integer userId) {
-        WebSocketSession textSession = TEXT_SESSIONS.remove(userId);
-        if (textSession != null) {
-            try {
-                textSession.close();
-            } catch (IOException e) {
-                log.error("关闭session异常", e);
-            }
-        }
+        removeSession(TEXT_SESSIONS, userId);
+    }
+
+    public static void removeTextSession(Integer userId, WebSocketSession session) {
+        removeSession(TEXT_SESSIONS, userId, session);
     }
 
     public static void removeVoiceSession(Integer userId) {
-        WebSocketSession voiceSession = VOICE_SESSIONS.remove(userId);
-        if (voiceSession != null) {
-            try {
-                voiceSession.close();
-            } catch (IOException e) {
-                log.error("关闭session异常", e);
-            }
-        }
+        removeSession(VOICE_SESSIONS, userId);
+    }
+
+    public static void removeVoiceSession(Integer userId, WebSocketSession session) {
+        removeSession(VOICE_SESSIONS, userId, session);
     }
 
     public static void removeVoicePayload(Integer userId) {
-        WebSocketSession voicePlaySession = VOICE_PLAY_SESSIONS.remove(userId);
-        if (voicePlaySession != null) {
-            try {
-                voicePlaySession.close();
-            } catch (IOException e) {
-                log.error("关闭session异常", e);
-            }
-        }
+        removeSession(VOICE_PLAY_SESSIONS, userId);
+    }
+
+    public static void removeVoicePayload(Integer userId, WebSocketSession session) {
+        removeSession(VOICE_PLAY_SESSIONS, userId, session);
     }
 
     public static WebSocketSession getTextSession(Integer userId) {
@@ -199,6 +191,40 @@ public class WebsocketManager {
             log.info("Interrupt signal sent for studentId: {}", studentId);
         } else {
             log.warn("No sending task found for studentId: {}", studentId);
+        }
+    }
+
+    private static void replaceSession(Map<Integer, WebSocketSession> sessions,
+                                       Integer userId,
+                                       WebSocketSession session) {
+        WebSocketSession oldSession = sessions.put(userId, session);
+        if (oldSession != null && oldSession != session) {
+            closeQuietly(oldSession);
+        }
+    }
+
+    private static void removeSession(Map<Integer, WebSocketSession> sessions, Integer userId) {
+        closeQuietly(sessions.remove(userId));
+    }
+
+    private static void removeSession(Map<Integer, WebSocketSession> sessions,
+                                      Integer userId,
+                                      WebSocketSession session) {
+        if (session != null && sessions.remove(userId, session)) {
+            closeQuietly(session);
+        }
+    }
+
+    private static void closeQuietly(WebSocketSession session) {
+        if (session == null) {
+            return;
+        }
+        try {
+            if (session.isOpen()) {
+                session.close();
+            }
+        } catch (IOException e) {
+            log.error("关闭session异常", e);
         }
     }
 

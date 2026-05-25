@@ -35,7 +35,7 @@ public class DefenseAssessmentVoicePlayHandler extends AbstractWebSocketHandler 
         log.info("voice关闭连接");
         String studentIdStr = session.getAttributes().get("studentId").toString();
         Integer studentId = Integer.parseInt(studentIdStr);
-        WebsocketManager.removeVoicePayload(studentId);
+        WebsocketManager.removeVoicePayload(studentId, session);
     }
 
     @Override
@@ -43,7 +43,7 @@ public class DefenseAssessmentVoicePlayHandler extends AbstractWebSocketHandler 
         log.error("websocket连接出错，sessionId:{}", session.getId(), exception);
         String userId = session.getAttributes().get("studentId").toString();
         Integer studentId = Integer.parseInt(userId);
-        WebsocketManager.removeVoicePayload(studentId);
+        WebsocketManager.removeVoicePayload(studentId, session);
     }
 
     @Override

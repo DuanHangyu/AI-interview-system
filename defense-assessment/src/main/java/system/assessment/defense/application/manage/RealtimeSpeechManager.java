@@ -214,6 +214,13 @@ public class RealtimeSpeechManager {
         }
     }
 
+    public void close(Integer studentId, WebSocketSession clientSession) {
+        RealtimeSpeechSession session = sessions.get(studentId);
+        if (session != null && session.belongsTo(clientSession) && sessions.remove(studentId, session)) {
+            session.close();
+        }
+    }
+
     public Duration transcriptWaitDuration() {
         return Duration.ofMillis(transcriptWaitMs);
     }
@@ -302,6 +309,10 @@ public class RealtimeSpeechManager {
 
         private boolean isClosed() {
             return closed.get();
+        }
+
+        private boolean belongsTo(WebSocketSession clientSession) {
+            return this.clientSession == clientSession;
         }
 
         private synchronized void startTurn() {
