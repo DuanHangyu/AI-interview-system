@@ -4,8 +4,10 @@ import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONUtil;
 import org.junit.jupiter.api.Test;
 import system.assessment.defense.application.dto.ValueDTO;
+import system.assessment.defense.infrastructure.repository.dao.po.StudentAssessmentRecordPO;
 
 import java.io.ByteArrayOutputStream;
+import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,5 +59,29 @@ class StudentAssessmentServiceTest {
         assertThat(StudentAssessmentService.hasValidAudio(emptyAudio)).isFalse();
         assertThat(StudentAssessmentService.hasValidAudio(tinyAudio)).isFalse();
         assertThat(StudentAssessmentService.hasValidAudio(validAudio)).isTrue();
+    }
+
+    @Test
+    void retakeRecordMustNotSkipDefenseIntro() {
+        StudentAssessmentRecordPO retakeRecord = StudentAssessmentRecordPO.builder()
+                .state(3)
+                .endDefenseTime(LocalDateTime.now())
+                .build();
+        StudentAssessmentRecordPO currentRecord = StudentAssessmentRecordPO.builder()
+                .state(0)
+                .endDefenseTime(LocalDateTime.now())
+                .build();
+        StudentAssessmentRecordPO legacyCurrentRecord = StudentAssessmentRecordPO.builder()
+                .endDefenseTime(LocalDateTime.now())
+                .build();
+        StudentAssessmentRecordPO doneRecord = StudentAssessmentRecordPO.builder()
+                .state(1)
+                .endDefenseTime(LocalDateTime.now())
+                .build();
+
+        assertThat(StudentAssessmentService.isDefenseFinishedForCurrentTodo(retakeRecord)).isFalse();
+        assertThat(StudentAssessmentService.isDefenseFinishedForCurrentTodo(currentRecord)).isTrue();
+        assertThat(StudentAssessmentService.isDefenseFinishedForCurrentTodo(legacyCurrentRecord)).isTrue();
+        assertThat(StudentAssessmentService.isDefenseFinishedForCurrentTodo(doneRecord)).isFalse();
     }
 }

@@ -130,6 +130,14 @@ public class StudentAssessmentService {
         return byteArrayOutputStream != null && byteArrayOutputStream.size() >= MIN_VALID_AUDIO_BYTES;
     }
 
+    static boolean isDefenseFinishedForCurrentTodo(StudentAssessmentRecordPO record) {
+        if (record == null || record.getEndDefenseTime() == null) {
+            return false;
+        }
+        Integer state = record.getState();
+        return state == null || Objects.equals(state, 0);
+    }
+
     private static LiveQuestion buildFallbackLiveQuestion(int index) {
         LiveQuestion fallback = new LiveQuestion();
         fallback.setQuestionDimension("综合能力");
@@ -399,7 +407,7 @@ public class StudentAssessmentService {
 
             for (StudentTodoDefenseDTO resultRecord : resultRecords) {
                 Optional.ofNullable(assessmentIdMap.get(resultRecord.getId()))
-                        .ifPresent((value) -> resultRecord.setFinishDefense(value.getEndDefenseTime() != null));
+                        .ifPresent((value) -> resultRecord.setFinishDefense(isDefenseFinishedForCurrentTodo(value)));
                 Optional.ofNullable(assessmentAppointmentTimeMap.get(resultRecord.getId()))
                         .ifPresent(iem -> {
                             resultRecord.setTimePeriod(iem.getTimePeriod());
@@ -1390,13 +1398,31 @@ public class StudentAssessmentService {
         realtimeSpeechManager.startTurn(studentId);
 
         Optional<StudentAssessmentRecordPO> recordOp = recordService.findByStudentIdAndAssessmentId(studentId, assessmentId);
-        StudentAssessmentRecordPO record = recordOp.orElseGet(() -> StudentAssessmentRecordPO.builder()
-                .assessmentId(assessmentId)
-                .studentId(studentId)
-                .startDefenseTime(LocalDateTime.now())
-                .score(-1)
-                .build());
-        recordService.saveOrUpdate(record);
+        LocalDateTime now = LocalDateTime.now();
+        if (recordOp.isPresent()) {
+            recordService.update(Wrappers.lambdaUpdate(StudentAssessmentRecordPO.class)
+                    .set(StudentAssessmentRecordPO::getStartDefenseTime, now)
+                    .set(StudentAssessmentRecordPO::getEndDefenseTime, null)
+                    .set(StudentAssessmentRecordPO::getDefenseVoice, null)
+                    .set(StudentAssessmentRecordPO::getDefenseContent, null)
+                    .set(StudentAssessmentRecordPO::getDefenseResult, null)
+                    .set(StudentAssessmentRecordPO::getScore, -1)
+                    .set(StudentAssessmentRecordPO::getCheckScore, null)
+                    .set(StudentAssessmentRecordPO::getState, 0)
+                    .set(StudentAssessmentRecordPO::getReAnalysis, false)
+                    .eq(StudentAssessmentRecordPO::getStudentId, studentId)
+                    .eq(StudentAssessmentRecordPO::getAssessmentId, assessmentId));
+        } else {
+            StudentAssessmentRecordPO record = StudentAssessmentRecordPO.builder()
+                    .assessmentId(assessmentId)
+                    .studentId(studentId)
+                    .startDefenseTime(now)
+                    .score(-1)
+                    .state(0)
+                    .reAnalysis(false)
+                    .build();
+            recordService.save(record);
+        }
 
         // 考核中
         studentAppointmentService.update(Wrappers.lambdaUpdate(StudentAssessmentAppointmentPO.class)
