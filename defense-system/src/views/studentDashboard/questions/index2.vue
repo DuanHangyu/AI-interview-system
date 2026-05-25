@@ -381,6 +381,10 @@ function endQuestionEarly() {
   if (detail.value?.answerTime - answerTime.value < 4) {
     return;
   }
+  if (audioStatus.value) {
+    stopAudio();
+    audioStatus.value = false;
+  }
   try {
     (voicePlayerRef.value as any)?.stopVoice?.();
   } catch (error) {}

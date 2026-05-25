@@ -11,6 +11,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 import system.assessment.defense.application.dto.WebSocketResponse;
 import system.assessment.defense.application.dto.WebsocketMessageDTO;
+import system.assessment.defense.application.manage.RealtimeSpeechManager;
 import system.assessment.defense.application.manage.WebsocketManager;
 import system.assessment.defense.application.service.StudentAssessmentService;
 import system.assessment.defense.infrastructure.emuns.WebsocketActionEnums;
@@ -26,12 +27,14 @@ import java.io.IOException;
 public class DefenseAssessmentVoiceHandler extends AbstractWebSocketHandler {
 
     private final StudentAssessmentService studentAssessmentService;
+    private final RealtimeSpeechManager realtimeSpeechManager;
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         String studentIdStr = session.getAttributes().get("studentId").toString();
         Integer studentId = Integer.parseInt(studentIdStr);
         WebsocketManager.addVoiceSession(studentId, session);
+        realtimeSpeechManager.open(studentId, session);
     }
 
     @Override
@@ -40,6 +43,7 @@ public class DefenseAssessmentVoiceHandler extends AbstractWebSocketHandler {
         String studentIdStr = session.getAttributes().get("studentId").toString();
         Integer studentId = Integer.parseInt(studentIdStr);
         WebsocketManager.removeVoiceSession(studentId);
+        realtimeSpeechManager.close(studentId);
     }
 
     @Override
@@ -48,6 +52,7 @@ public class DefenseAssessmentVoiceHandler extends AbstractWebSocketHandler {
         String userId = session.getAttributes().get("studentId").toString();
         Integer studentId = Integer.parseInt(userId);
         WebsocketManager.removeVoiceSession(studentId);
+        realtimeSpeechManager.close(studentId);
     }
 
     @Override
@@ -62,7 +67,8 @@ public class DefenseAssessmentVoiceHandler extends AbstractWebSocketHandler {
     protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message) throws Exception {
         String studentIdStr = session.getAttributes().get("studentId").toString();
         Integer studentId = Integer.parseInt(studentIdStr);
-        studentAssessmentService.appendVoice(message.getPayload(), studentId);
+        studentAssessmentService.appendVoice(message.getPayload().asReadOnlyBuffer(), studentId);
+        realtimeSpeechManager.appendAudio(studentId, message.getPayload().asReadOnlyBuffer());
     }
 
     @Override

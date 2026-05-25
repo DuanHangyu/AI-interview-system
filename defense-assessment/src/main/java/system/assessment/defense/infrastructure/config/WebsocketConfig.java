@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
 import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
+import system.assessment.defense.application.manage.RealtimeSpeechManager;
 import system.assessment.defense.application.service.StudentAssessmentService;
 import system.assessment.defense.interfaces.rest.websocket.DefenseAssessmentHandler;
 import system.assessment.defense.interfaces.rest.websocket.DefenseAssessmentVoiceHandler;
@@ -23,13 +24,16 @@ public class WebsocketConfig implements WebSocketConfigurer {
     @Resource
     private StudentAssessmentService studentAssessmentService;
 
+    @Resource
+    private RealtimeSpeechManager realtimeSpeechManager;
+
     @Override
     public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
         registry.addHandler(new DefenseAssessmentHandler(studentAssessmentService), "/defense-assessment")
                 .setAllowedOriginPatterns("*")
                 .addInterceptors(new DefenseAssessmentHandshakeInterceptor());
 
-        registry.addHandler(new DefenseAssessmentVoiceHandler(studentAssessmentService), "/voice/defense-assessment")
+        registry.addHandler(new DefenseAssessmentVoiceHandler(studentAssessmentService, realtimeSpeechManager), "/voice/defense-assessment")
                 .setAllowedOriginPatterns("*")
                 .addInterceptors(new DefenseAssessmentHandshakeInterceptor());
 

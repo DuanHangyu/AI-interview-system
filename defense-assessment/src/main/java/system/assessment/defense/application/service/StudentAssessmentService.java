@@ -25,6 +25,7 @@ import system.assessment.defense.application.dto.backed.DigitalHumanDTO;
 import system.assessment.defense.application.dto.front.StudentAppointmentCmd;
 import system.assessment.defense.application.manage.GeminiManager;
 import system.assessment.defense.application.manage.OssManager;
+import system.assessment.defense.application.manage.RealtimeSpeechManager;
 import system.assessment.defense.application.manage.TtsManager;
 import system.assessment.defense.application.manage.WebsocketManager;
 import system.assessment.defense.domain.entity.StudentSummary;
@@ -90,6 +91,8 @@ public class StudentAssessmentService {
     private final GeminiManager geminiManager;
 
     private final AssessmentMaterialService assessmentMaterialService;
+
+    private final RealtimeSpeechManager realtimeSpeechManager;
 
     private final TtsManager ttsManager;
 
@@ -862,6 +865,12 @@ public class StudentAssessmentService {
         }
     }
 
+    private String getRealtimeVoiceContentOrFallback(Integer studentId, byte[] bytes) {
+        return realtimeSpeechManager.completeTurnAndAwaitTranscript(studentId)
+                .filter(StringUtils::isNotBlank)
+                .orElseGet(() -> getVoiceContent(bytes));
+    }
+
     private void endAssessment(Integer studentId,
                                AssessmentSettingPO setting,
                                List<StudentAssessmentQuestionAnswerPO> questionAnswerPOS,
@@ -959,7 +968,7 @@ public class StudentAssessmentService {
                 consumer.accept(WebSocketResponse.ofLast("结束答题"));
                 threadPoolExecutor.execute(() -> {
                     try {
-                        String voiceText = getVoiceContent(voiceBytes);
+                        String voiceText = getRealtimeVoiceContentOrFallback(studentId, voiceBytes);
                         questionAnswerService.update(Wrappers.lambdaUpdate(StudentAssessmentQuestionAnswerPO.class)
                                 .set(StudentAssessmentQuestionAnswerPO::getFollowAnswer, voiceText)
                                 .eq(StudentAssessmentQuestionAnswerPO::getId, questionAnswer.getId()));
@@ -987,7 +996,7 @@ public class StudentAssessmentService {
             // 异步转写，并在追问生成完成后再通知前端获取下一条题目
             threadPoolExecutor.execute(() -> {
                 try {
-                    String voiceText = getVoiceContent(voiceBytes);
+                    String voiceText = getRealtimeVoiceContentOrFallback(studentId, voiceBytes);
                     questionAnswerService.update(Wrappers.lambdaUpdate(StudentAssessmentQuestionAnswerPO.class)
                             .set(StudentAssessmentQuestionAnswerPO::getAnswer, voiceText)
                             .eq(StudentAssessmentQuestionAnswerPO::getId, questionAnswerPO.getId()));
@@ -1037,6 +1046,7 @@ public class StudentAssessmentService {
         AssessmentSettingPO setting = settingService.getById(assessmentId);
         Integer answerTime = setting.getAnswerTime();
         VOICE_MAP.put(studentId, new ByteArrayOutputStream(answerTime * 3 * 8192));
+        realtimeSpeechManager.startTurn(studentId);
         consumer.accept(WebSocketResponse.ofLast("开始答题"));
     }
 
@@ -1056,7 +1066,7 @@ public class StudentAssessmentService {
         consumer.accept(WebSocketResponse.ofLast("结束答辩"));
         // 异步翻译
         threadPoolExecutor.execute(() -> {
-            String defenseContent = getVoiceContent(bytes);
+            String defenseContent = getRealtimeVoiceContentOrFallback(studentId, bytes);
             recordService.update(Wrappers.lambdaUpdate(StudentAssessmentRecordPO.class)
                     .set(StudentAssessmentRecordPO::getDefenseContent, defenseContent)
                     .eq(StudentAssessmentRecordPO::getStudentId, studentId)
@@ -1092,6 +1102,7 @@ public class StudentAssessmentService {
         AssessmentSettingPO setting = settingService.getById(assessmentId);
         Integer duration = setting.getDuration();
         VOICE_MAP.put(studentId, new ByteArrayOutputStream(duration * 3 * 8192));
+        realtimeSpeechManager.startTurn(studentId);
 
         Optional<StudentAssessmentRecordPO> recordOp = recordService.findByStudentIdAndAssessmentId(studentId, assessmentId);
         StudentAssessmentRecordPO record = recordOp.orElseGet(() -> StudentAssessmentRecordPO.builder()
@@ -1123,7 +1134,10 @@ public class StudentAssessmentService {
     }
 
     public void appendVoice(ByteBuffer payload, Integer studentId) throws IOException {
-        VOICE_MAP.computeIfAbsent(studentId, k -> new ByteArrayOutputStream()).write(payload.array());
+        ByteBuffer copy = payload.asReadOnlyBuffer();
+        byte[] bytes = new byte[copy.remaining()];
+        copy.get(bytes);
+        VOICE_MAP.computeIfAbsent(studentId, k -> new ByteArrayOutputStream()).write(bytes);
     }
 
     public StudentAssessmentDetailDTO assessmentDetailByRecordId(Integer id) {

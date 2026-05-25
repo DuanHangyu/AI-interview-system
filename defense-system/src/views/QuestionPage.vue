@@ -327,6 +327,10 @@ function startAnswerQuestions() {
 }
 
 function endQuestionEarly() {
+  if (audioStatus.value) {
+    stopAudio();
+    audioStatus.value = false;
+  }
   try {
     (voicePlayerRef.value as any)?.stopVoice?.();
   } catch (error) {}
