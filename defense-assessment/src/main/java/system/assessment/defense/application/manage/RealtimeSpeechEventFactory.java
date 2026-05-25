@@ -41,6 +41,34 @@ public class RealtimeSpeechEventFactory {
         ));
     }
 
+    public String audioOutputSessionUpdate(String voice, String instructions) {
+        Map<String, Object> session = new LinkedHashMap<>();
+        session.put("modalities", List.of("text", "audio"));
+        session.put("voice", StringUtils.defaultIfBlank(voice, "Ethan"));
+        session.put("input_audio_format", "pcm");
+        session.put("output_audio_format", "pcm");
+        session.put("instructions", StringUtils.defaultIfBlank(instructions, "请把用户提供的内容原样朗读成语音。"));
+        session.put("turn_detection", null);
+
+        return toJson(Map.of(
+                "event_id", eventId(),
+                "type", "session.update",
+                "session", session
+        ));
+    }
+
+    public String responseCreateForAudio(String instructions) {
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("modalities", List.of("text", "audio"));
+        response.put("instructions", StringUtils.defaultIfBlank(instructions, "请朗读题目文本。"));
+
+        return toJson(Map.of(
+                "event_id", eventId(),
+                "type", "response.create",
+                "response", response
+        ));
+    }
+
     public String inputAudioAppend(byte[] audioChunk) {
         return toJson(Map.of(
                 "event_id", eventId(),

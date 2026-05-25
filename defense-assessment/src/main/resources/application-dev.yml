@@ -48,6 +48,8 @@ dashscope:
     model: ${DASHSCOPE_REALTIME_MODEL:qwen3.5-omni-plus-realtime}
     voice: ${DASHSCOPE_REALTIME_VOICE:Ethan}
     transcript-wait-ms: ${DASHSCOPE_REALTIME_TRANSCRIPT_WAIT_MS:5000}
+    voice-output-enabled: ${DASHSCOPE_REALTIME_VOICE_OUTPUT_ENABLED:true}
+    voice-output-wait-ms: ${DASHSCOPE_REALTIME_VOICE_OUTPUT_WAIT_MS:12000}
   models:
     text: qwen3.6-plus
     omni: qwen3-omni-flash

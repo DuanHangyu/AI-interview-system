@@ -30,6 +30,7 @@ public class TtsManager {
             """;
 
     private final OpenAiManager openAiManager;
+    private final RealtimeVoiceOutputManager realtimeVoiceOutputManager;
 
     @Value("${dashscope.models.omni}")
     private String omniModel;
@@ -82,6 +83,15 @@ public class TtsManager {
         stopWatch.start();
         AtomicBoolean hasAudio = new AtomicBoolean(false);
         try {
+            boolean realtimeHasAudio = realtimeVoiceOutputManager.streamQuestionVoice(text, bytes -> {
+                hasAudio.set(true);
+                audioChunkConsumer.accept(bytes);
+            });
+            if (realtimeHasAudio) {
+                log.info("tts stream used realtime voice output");
+                return true;
+            }
+
             OmniAudioResponseDTO audioResponse = openAiManager.chatCompletionWithAudioOutput(
                     omniModel,
                     QUESTION_VOICE_SYSTEM_PROMPT,
