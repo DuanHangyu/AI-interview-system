@@ -45,6 +45,9 @@ public class OpenAiManager {
     @Value("${dashscope.models.doc:qwen-long}")
     private String docModel;
 
+    @Value("${dashscope.enable-thinking:false}")
+    private boolean enableThinking;
+
     public String getTextModel() {
         return textModel;
     }
@@ -229,6 +232,10 @@ public class OpenAiManager {
         return messages;
     }
 
+    private void applyThinkingMode(Map<String, Object> body) {
+        body.put("enable_thinking", enableThinking);
+    }
+
     private String doCall(String model, List<Map<String, Object>> messages,
                            String schemaName, String schemaJson, String logLabel) {
         long start = System.currentTimeMillis();
@@ -240,6 +247,7 @@ public class OpenAiManager {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("model", model);
             body.put("messages", messages);
+            applyThinkingMode(body);
 
             if (schemaName != null && schemaJson != null) {
                 body.put("response_format", Map.of("type", "json_object"));
@@ -317,6 +325,7 @@ public class OpenAiManager {
             body.put("stream", true);
             body.put("stream_options", Map.of("include_usage", true));
             body.put("modalities", List.of("text"));
+            applyThinkingMode(body);
 
             String jsonBody = objectMapper.writeValueAsString(body);
             log.info("{} uuid:{}, model:{}, body length:{}", label, uuid, model, jsonBody.length());
@@ -417,7 +426,7 @@ public class OpenAiManager {
             body.put("stream_options", Map.of("include_usage", true));
             body.put("modalities", List.of("text", "audio"));
             body.put("audio", Map.of("voice", voice, "format", format));
-            body.put("enable_thinking", false);
+            applyThinkingMode(body);
 
             String jsonBody = objectMapper.writeValueAsString(body);
             log.info("{} uuid:{}, model:{}, body length:{}", label, uuid, model, jsonBody.length());
