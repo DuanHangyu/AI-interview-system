@@ -1,0 +1,74 @@
+spring:
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: false
+      accept-empty-string-as-null-object: true
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 500MB
+  application:
+    name: defense-assessment-system
+  profiles:
+    active: local
+
+server:
+  port: 8081
+  tomcat:
+    max-http-form-post-size: 1024MB
+    threads:
+      max: 2000
+
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    url: /v3/api-docs
+  webjars:
+    prefix: /webjars
+
+mybatis-plus:
+  type-aliases-package: system.assessment.defense.infrastructure.repository.dao.po
+  configuration:
+    map-underscore-to-camel-case: true # 启用驼峰映射
+  global-config:
+    db-config:
+      id-type: auto # 主键自增策略
+      logic-delete-field: deleted
+      logic-delete-value: 1 # 逻辑已删除值 默认1
+      logic-not-delete-value: 0
+
+############## Sa-Token 配置 (文档: https://sa-token.cc) ##############
+sa-token:
+  # token 名称（同时也是 cookie 名称）
+  token-name: Authorization
+  # token 前缀
+  token-prefix: Bearer
+  # token 有效期（单位：秒） 默认1天，-1 代表永久有效
+  timeout: 86400
+  # token 最低活跃频率（单位：秒），如果 token 超过此时间没有访问系统就会被冻结，默认-1 代表不限制，永不冻结
+  active-timeout: -1
+  # 是否允许同一账号多地同时登录 （为 true 时允许一起登录, 为 false 时新登录挤掉旧登录）
+  is-concurrent: false
+  # 在多人登录同一账号时，是否共用一个 token （为 true 时所有登录共用一个 token, 为 false 时每次登录新建一个 token）
+  is-share: false
+  # token 风格（默认可取值：uuid、simple-uuid、random-32、random-64、random-128、tik）
+  token-style: random-64
+  # 是否输出操作日志
+  is-log: false
+  is-read-cookie: true
+
+logging:
+  level:
+    root: info
+#    system.assessment.defense.infrastructure.repository.dao.mapper: debug
+
+## 阿里云oss存储
+aliyun:
+  oss:
+    endpoint: ${ALIYUN_OSS_ENDPOINT:oss-ap-southeast-1.aliyuncs.com}
+    accessKeyId: ${ALIYUN_OSS_ACCESS_KEY_ID:}
+    accessKeySecret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:}
+    bucketName: ${ALIYUN_OSS_BUCKET:defense-assessment-new}

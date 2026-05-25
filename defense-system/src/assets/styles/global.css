@@ -1,0 +1,28 @@
+body {
+  margin: 0;
+  padding: 0;
+}
+
+.ant-table-body {
+  /* 完全隐藏滚动条但保留滚动功能 */
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE/Edge */
+}
+
+.ant-table-body::-webkit-scrollbar {
+  /* Chrome, Safari, Opera */
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/* 当内容不足时不显示滚动条 */
+.ant-table-body-inner {
+  overflow: hidden !important;
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

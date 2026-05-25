@@ -1,0 +1,66 @@
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      idle-timeout: 120000
+      max-lifetime: 120000
+      connection-timeout: 10000
+      keepalive-time: 60000
+      auto-commit: true
+      validation-timeout: 3000
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    jdbc-url: ${DB_JDBC_URL:jdbc:mysql://8.136.219.184:3306/defense_test?useUnicode=true&characterEncoding=UTF-8&useSSL=false&zeroDateTimeBehavior=convertToNull&useTimezone=true&serverTimezone=GMT%2B8&allowMultiQueries=true}
+    url: ${spring.datasource.jdbc-url}
+    username: ${DB_USERNAME:defense_test}
+    password: ${DB_PASSWORD:}
+  data:
+    redis:
+      database: 0
+      host: 127.0.0.1
+      port: 6379
+      password: ${REDIS_PASSWORD:}
+      timeout: 5000
+      lettuce:
+        pool:
+          max-active: 8
+          max-wait: -1ms
+          max-idle: 4
+          min-idle: 2
+          time-between-eviction-runs: 30s
+
+dashscope:
+  base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  api-key: ${DASHSCOPE_API_KEY:}
+  models:
+    text: qwen3.6-plus
+    omni: qwen3-omni-flash
+    doc: qwen-long
+  audio:
+    voice: Cherry
+    format: wav
+
+aliyun:
+  oss:
+    endpoint: ${ALIYUN_OSS_ENDPOINT:oss-ap-southeast-1.aliyuncs.com}
+    accessKeyId: ${ALIYUN_OSS_ACCESS_KEY_ID:}
+    accessKeySecret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:}
+    bucketName: ${ALIYUN_OSS_BUCKET:defense-assessment-new}
+
+jetcache:
+  statIntervalMinutes: 15
+  areaInCacheName: false
+  local:
+    default:
+      type: caffeine
+      keyConvertor: jackson
+      limit: 100
+      expireAfterWriteInMillis: 60000
+  remote:
+    default:
+      type: redis.lettuce
+      keyConvertor: jackson
+      broadcastChannel: projectA
+      valueEncoder: java
+      valueDecoder: java
+      uri: redis://127.0.0.1:6379/0
