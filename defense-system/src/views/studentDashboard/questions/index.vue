@@ -184,14 +184,37 @@ const isVoiceReady = ref(false);
 const isGenQuestion = ref(false);
 const audioStatus = ref(false);
 const endAnswerLoading = ref(false);
+let voiceFallbackTimer: number | undefined = undefined;
 
 const isPlaying = ref(false);
 
+function clearVoiceFallbackTimer() {
+  if (voiceFallbackTimer) {
+    clearTimeout(voiceFallbackTimer);
+    voiceFallbackTimer = undefined;
+  }
+}
+
+function scheduleVoiceFallbackStart() {
+  clearVoiceFallbackTimer();
+  voiceFallbackTimer = setTimeout(() => {
+    voiceFallbackTimer = undefined;
+    if (!audioStatus.value && !isPlaying.value && !isGenQuestion.value) {
+      console.warn("题目播报未开始，自动进入答题状态");
+      broadcastingEnd();
+    }
+  }, 10000);
+}
+
 const updatePlaying = (e: boolean) => {
   isPlaying.value = e;
+  if (e) {
+    clearVoiceFallbackTimer();
+  }
 };
 
 const broadcastingEnd = () => {
+  clearVoiceFallbackTimer();
   if (audioStatus.value) {
     stopAudio();
     audioStatus.value = false;
@@ -245,6 +268,7 @@ function startAnswerQuestions() {
 }
 
 function endQuestionEarly() {
+  clearVoiceFallbackTimer();
   if (detail.value?.answerTime - answerTime.value < 4) {
     return;
   }
@@ -271,6 +295,7 @@ function endQuestionEarly() {
 }
 
 function generateQuestions() {
+  clearVoiceFallbackTimer();
   isGenQuestion.value = true;
   if (audioStatus.value) {
     stopAudio();
@@ -301,6 +326,7 @@ function generateQuestions() {
           } else {
             questionList.value?.push({ title: r.data?.question });
           }
+          scheduleVoiceFallbackStart();
         }
       }
     })
@@ -310,6 +336,7 @@ function generateQuestions() {
 }
 
 function overAssessment() {
+  clearVoiceFallbackTimer();
   isGenQuestion.value = false;
   if (audioStatus.value) {
     stopAudio();
@@ -340,6 +367,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  clearVoiceFallbackTimer();
   stopCamera();
   // closeAudio();
   clearInterval(answerTimer);

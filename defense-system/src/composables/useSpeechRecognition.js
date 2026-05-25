@@ -15,6 +15,8 @@ export function useSpeechRecognition() {
   let heartbeatInterval = null;
 
   let manuallyClosed = false;
+  let reconnectTimer = null;
+  let initPromise = null;
 
   function mergeChunks(chunks) {
     let totalLength = 0;
@@ -42,17 +44,31 @@ export function useSpeechRecognition() {
     }
     if (!sendInterval && ws.value && ws.value.readyState === WebSocket.OPEN) {
       sendInterval = setInterval(() => {
-        if (audioChunks.length > 0 && ws.value.readyState === WebSocket.OPEN) {
-          const merged = mergeChunks(audioChunks);
-          console.log("ws.send");
-          ws.value.send(merged);
-          audioChunks.length = 0;
-        }
+        flushAudioChunks();
       }, 100);
     }
   }
 
-  function stopAudio() {
+  function flushAudioChunks() {
+    if (
+      audioChunks.length > 0 &&
+      ws.value &&
+      ws.value.readyState === WebSocket.OPEN
+    ) {
+      const merged = mergeChunks(audioChunks);
+      console.log("ws.send");
+      ws.value.send(merged);
+      audioChunks.length = 0;
+      return true;
+    }
+    return false;
+  }
+
+  function stopAudio(options = {}) {
+    const { flush = true } = options;
+    if (flush) {
+      flushAudioChunks();
+    }
     isStreaming = false;
     if (sendInterval) {
       clearInterval(sendInterval);
@@ -107,7 +123,91 @@ export function useSpeechRecognition() {
     animationFrameId = requestAnimationFrame(checkVolume);
   };
 
+  async function cleanupAudioResources({ closeSocket = false, clearChunks = true } = {}) {
+    stopHeartbeat();
+    if (sendInterval) {
+      clearInterval(sendInterval);
+      sendInterval = null;
+    }
+    if (reconnectTimer) {
+      clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    }
+    if (animationFrameId) {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = null;
+    }
+
+    if (analyser) {
+      try {
+        analyser.disconnect();
+      } catch (e) {}
+      analyser = null;
+    }
+
+    if (micNode) {
+      try {
+        micNode.disconnect();
+      } catch (e) {}
+      micNode = null;
+    }
+
+    if (audioStream) {
+      audioStream.getTracks().forEach((track) => track.stop());
+      audioStream = null;
+    }
+
+    if (audioContext) {
+      try {
+        if (audioContext.state !== "closed") {
+          await audioContext.close();
+        }
+      } catch (e) {
+        console.warn("关闭 AudioContext 失败", e);
+      }
+      audioContext = null;
+    }
+
+    if (closeSocket && ws.value) {
+      console.log("Client close", ws.value.readyState);
+      if (ws.value.readyState !== WebSocket.CLOSED) {
+        ws.value.close(1000, "Client close");
+      }
+      ws.value = null;
+    }
+
+    if (clearChunks) {
+      audioChunks.length = 0;
+    }
+    volumeLevel.value = 0;
+  }
+
+  function scheduleReconnect(shouldResumeStreaming) {
+    if (manuallyClosed || reconnectTimer) {
+      return;
+    }
+    console.warn("WebSocket 被动关闭，尝试重新连接...");
+    reconnectTimer = setTimeout(async () => {
+      reconnectTimer = null;
+      await cleanupAudioResources({ clearChunks: true });
+      await initAudio();
+      if (shouldResumeStreaming) {
+        await startAudio();
+      }
+    }, 1000);
+  }
+
   async function initAudio() {
+    if (initPromise) {
+      return initPromise;
+    }
+    initPromise = doInitAudio().finally(() => {
+      initPromise = null;
+    });
+    return initPromise;
+  }
+
+  async function doInitAudio() {
     try {
       manuallyClosed = false;
       audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -137,16 +237,17 @@ export function useSpeechRecognition() {
       // 启动音量检测循环
       animationFrameId = requestAnimationFrame(checkVolume);
       // -----------------------------------
-      ws.value = new WebSocket(
+      const socket = new WebSocket(
         `${process.env.VUE_APP_BASE_VOICE_WS}`,
         getToken()
       );
+      ws.value = socket;
 
-      ws.value.onopen = () => {
+      socket.onopen = () => {
         startHeartbeat();
       };
 
-      ws.value.onmessage = (event) => {
+      socket.onmessage = (event) => {
         // mittEmit("SOURCE:BLOB", event.data);
         try {
           const result = event.data;
@@ -158,22 +259,24 @@ export function useSpeechRecognition() {
         }
       };
 
-      ws.value.onerror = (e) => {
+      socket.onerror = (e) => {
         console.error("WebSocket error", e);
       };
 
-      ws.value.onclose = function (event) {
+      socket.onclose = function (event) {
         console.log("WebSocket close");
         console.log("代码:", event.code);
         console.log("是否清理关闭:", event.wasClean);
         console.log("原因:", event.reason);
         stopHeartbeat();
+        const shouldResumeStreaming = isStreaming;
+        stopAudio({ flush: false });
+        if (ws.value === socket) {
+          ws.value = null;
+        }
 
         if (!manuallyClosed) {
-          console.warn("WebSocket 被动关闭，尝试重新连接...");
-          setTimeout(() => {
-            initAudio(); // 尝试重连
-          }, 1000);
+          scheduleReconnect(shouldResumeStreaming);
         }
       };
     } catch (err) {
@@ -185,44 +288,7 @@ export function useSpeechRecognition() {
     try {
       manuallyClosed = true; // 主动关闭标志
       stopAudio();
-      stopHeartbeat();
-
-      if (audioStream) {
-        audioStream.getTracks().forEach((track) => track.stop());
-        audioStream = null;
-      }
-
-      if (micNode) {
-        micNode.disconnect();
-        micNode = null;
-      }
-
-      if (audioContext) {
-        if (audioContext.state !== "closed") {
-          await audioContext.close();
-        }
-        audioContext = null;
-      }
-
-      if (ws.value) {
-        console.log("Client close", ws.value.readyState);
-        if (ws.value.readyState !== WebSocket.CLOSED) {
-          ws.value.close(1000, "Client close");
-          const maxAttempts = 10;
-          let attempt = 0;
-          while (
-            (!ws.value || ws.value.readyState !== WebSocket.CLOSED) &&
-            attempt < maxAttempts
-          ) {
-            console.log(`等待 WebSocket 关闭... 尝试次数 ${attempt + 1}`);
-            await new Promise((resolve) => setTimeout(resolve, 500));
-            attempt++;
-          }
-        }
-        ws.value = null;
-      }
-
-      audioChunks.length = 0;
+      await cleanupAudioResources({ closeSocket: true, clearChunks: true });
     } catch (err) {
       console.error("停止音频资源出错：", err);
     }

@@ -64,6 +64,8 @@ public class StudentAssessmentService {
     // 追问缓存 key: studentId:assessmentId:questionIndex
     private static final Map<String, String> FOLLOW_UP_MAP = new ConcurrentHashMap<>();
 
+    private static final long INTERVIEW_SESSION_CACHE_HOURS = 3;
+
     @Data
     @AllArgsConstructor
     @NoArgsConstructor
@@ -72,6 +74,62 @@ public class StudentAssessmentService {
         private String question;
         private boolean followGenerated;
         private String followQuestion;
+    }
+
+    static List<LiveQuestion> normalizeLiveQuestionsForInterview(cn.hutool.json.JSONArray questions, Integer expectedCount) {
+        int targetCount = expectedCount == null ? 0 : Math.max(expectedCount, 0);
+        List<LiveQuestion> normalized = new ArrayList<>();
+        if (questions != null) {
+            for (int i = 0; i < questions.size(); i++) {
+                if (targetCount > 0 && normalized.size() >= targetCount) {
+                    break;
+                }
+                cn.hutool.json.JSONObject q = questions.getJSONObject(i);
+                if (q == null) {
+                    continue;
+                }
+                String question = StringUtils.trimToEmpty(q.getStr("question"));
+                if (StringUtils.isBlank(question)) {
+                    continue;
+                }
+                LiveQuestion lq = new LiveQuestion();
+                lq.setQuestionDimension(StringUtils.defaultIfBlank(StringUtils.trimToEmpty(q.getStr("questionDimension")), "综合能力"));
+                lq.setQuestion(question);
+                lq.setFollowGenerated(false);
+                normalized.add(lq);
+            }
+        }
+
+        if (targetCount <= 0) {
+            return normalized;
+        }
+        while (normalized.size() < targetCount) {
+            normalized.add(buildFallbackLiveQuestion(normalized.size() + 1));
+        }
+        return normalized;
+    }
+
+    static int resolveDisplayScore(Integer checkScore, List<ValueDTO> value) {
+        if (checkScore != null && checkScore > 0) {
+            return checkScore;
+        }
+        if (CollectionUtils.isEmpty(value)) {
+            return 0;
+        }
+        return value.stream()
+                .filter(Objects::nonNull)
+                .map(ValueDTO::getValue)
+                .filter(Objects::nonNull)
+                .mapToInt(Integer::intValue)
+                .sum();
+    }
+
+    private static LiveQuestion buildFallbackLiveQuestion(int index) {
+        LiveQuestion fallback = new LiveQuestion();
+        fallback.setQuestionDimension("综合能力");
+        fallback.setQuestion("请结合你的答辩内容，补充说明第%s个关键技术点的依据、实现细节和验证结果。".formatted(index));
+        fallback.setFollowGenerated(false);
+        return fallback;
     }
 
     private final RedisTemplate<String, Object> redisTemplate;
@@ -141,6 +199,71 @@ public class StudentAssessmentService {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
         // 格式化为字符串
         return now.format(formatter);
+    }
+
+    private String liveQuestionsKey(Integer studentId, Integer assessmentId) {
+        return RedisConstants.STUDENT_LIVE_QUESTIONS.formatted(studentId, assessmentId);
+    }
+
+    private String followUpKey(Integer studentId, Integer assessmentId, Integer questionIndex) {
+        return RedisConstants.STUDENT_FOLLOW_UP.formatted(studentId, assessmentId, questionIndex);
+    }
+
+    private void cacheLiveQuestions(String mapKey, Integer studentId, Integer assessmentId, List<LiveQuestion> liveQuestions) {
+        LIVE_QUESTION_MAP.put(mapKey, liveQuestions);
+        redisTemplate.opsForValue().set(liveQuestionsKey(studentId, assessmentId),
+                JSONUtil.toJsonStr(liveQuestions), INTERVIEW_SESSION_CACHE_HOURS, TimeUnit.HOURS);
+    }
+
+    private List<LiveQuestion> getCachedLiveQuestions(String mapKey, Integer studentId, Integer assessmentId, Integer questionCount) {
+        List<LiveQuestion> liveQuestions = LIVE_QUESTION_MAP.get(mapKey);
+        if (CollectionUtils.isEmpty(liveQuestions)) {
+            Object cached = redisTemplate.opsForValue().get(liveQuestionsKey(studentId, assessmentId));
+            if (cached != null && StringUtils.isNotBlank(cached.toString())) {
+                liveQuestions = JSONUtil.toList(JSONUtil.parseArray(cached.toString()), LiveQuestion.class);
+                if (CollectionUtils.isNotEmpty(liveQuestions)) {
+                    LIVE_QUESTION_MAP.put(mapKey, liveQuestions);
+                }
+            }
+        }
+        if (questionCount != null && questionCount > 0 && CollectionUtils.isNotEmpty(liveQuestions)
+                && liveQuestions.size() != questionCount) {
+            cn.hutool.json.JSONArray questions = JSONUtil.parseArray(JSONUtil.toJsonStr(liveQuestions));
+            liveQuestions = normalizeLiveQuestionsForInterview(questions, questionCount);
+            cacheLiveQuestions(mapKey, studentId, assessmentId, liveQuestions);
+        }
+        return liveQuestions;
+    }
+
+    private void cacheFollowUp(String mapKey, Integer studentId, Integer assessmentId, Integer questionIndex, String followUp) {
+        FOLLOW_UP_MAP.put(mapKey, followUp);
+        redisTemplate.opsForValue().set(followUpKey(studentId, assessmentId, questionIndex),
+                followUp, INTERVIEW_SESSION_CACHE_HOURS, TimeUnit.HOURS);
+    }
+
+    private String getCachedFollowUp(String mapKey, Integer studentId, Integer assessmentId, Integer questionIndex) {
+        String followUp = FOLLOW_UP_MAP.get(mapKey);
+        if (StringUtils.isBlank(followUp)) {
+            Object cached = redisTemplate.opsForValue().get(followUpKey(studentId, assessmentId, questionIndex));
+            if (cached != null && StringUtils.isNotBlank(cached.toString())) {
+                followUp = cached.toString();
+                FOLLOW_UP_MAP.put(mapKey, followUp);
+            }
+        }
+        return followUp;
+    }
+
+    private void clearInterviewQuestionState(Integer studentId, Integer assessmentId, Integer questionCount) {
+        String mapKey = studentId + ":" + assessmentId;
+        LIVE_QUESTION_MAP.remove(mapKey);
+        FOLLOW_UP_MAP.keySet().removeIf(key -> key.startsWith(mapKey));
+        redisTemplate.delete(liveQuestionsKey(studentId, assessmentId));
+        redisTemplate.delete(RedisConstants.STUDENT_QUESTION.formatted(studentId, assessmentId));
+        if (questionCount != null && questionCount > 0) {
+            for (int i = 1; i <= questionCount; i++) {
+                redisTemplate.delete(followUpKey(studentId, assessmentId, i));
+            }
+        }
     }
 
     /**
@@ -656,14 +779,13 @@ public class StudentAssessmentService {
         // 7.判断并处理结束考核请求
         if (messageDTO.endAssessment()) {
             // 清理内存缓存
-            String mapKey = studentId + ":" + assessmentId;
-            LIVE_QUESTION_MAP.remove(mapKey);
-            FOLLOW_UP_MAP.keySet().removeIf(key -> key.startsWith(mapKey));
+            clearInterviewQuestionState(studentId, assessmentId, setting.getQuestionCount());
             VOICE_MAP.remove(studentId);
 
             // 先更新为分析中
             recordService.update(Wrappers.lambdaUpdate(StudentAssessmentRecordPO.class)
                     .set(StudentAssessmentRecordPO::getState, 2)
+                    .set(StudentAssessmentRecordPO::getReAnalysis, false)
                     .eq(StudentAssessmentRecordPO::getStudentId, studentId)
                     .eq(StudentAssessmentRecordPO::getAssessmentId, assessmentId));
 
@@ -678,17 +800,21 @@ public class StudentAssessmentService {
                     endAssessment(studentId, setting, questionAnswerPOS, assessmentId);
                 } catch (Exception e) {
                     log.error("异步分析考核失败, studentId:{}, assessmentId:{}", studentId, assessmentId, e);
+                    recordService.update(Wrappers.lambdaUpdate(StudentAssessmentRecordPO.class)
+                            .set(StudentAssessmentRecordPO::getReAnalysis, false)
+                            .eq(StudentAssessmentRecordPO::getStudentId, studentId)
+                            .eq(StudentAssessmentRecordPO::getAssessmentId, assessmentId));
+                    WebsocketManager.sendTextMessage(studentId, WebSocketResponse.of("考核分析失败，系统将自动重试"));
                 }
             });
         }
     }
 
     private void startAssessment(Integer studentId, Consumer<WebSocketResponse> consumer, int assessmentId) {
+        AssessmentSettingPO setting = settingService.getById(assessmentId);
         // 清除之前的问答记录
         questionAnswerService.clearQuestionAnswer(studentId, assessmentId);
-        String mapKey = studentId + ":" + assessmentId;
-        LIVE_QUESTION_MAP.remove(mapKey);
-        FOLLOW_UP_MAP.keySet().removeIf(key -> key.startsWith(mapKey));
+        clearInterviewQuestionState(studentId, assessmentId, setting.getQuestionCount());
 
         // 考核中
         studentAppointmentService.update(Wrappers.lambdaUpdate(StudentAssessmentAppointmentPO.class)
@@ -698,7 +824,6 @@ public class StudentAssessmentService {
         consumer.accept(WebSocketResponse.of("开始考核"));
 
         // 异步现场生成题目
-        AssessmentSettingPO setting = settingService.getById(assessmentId);
         consumer.accept(WebSocketResponse.of("正在生成题目，请稍候..."));
         threadPoolExecutor.execute(() -> {
             try {
@@ -732,16 +857,9 @@ public class StudentAssessmentService {
                 }
                 cn.hutool.json.JSONObject jsonResult = JSONUtil.parseObj(jsonStr);
                 cn.hutool.json.JSONArray questions = jsonResult.getJSONArray("questions");
-                List<LiveQuestion> liveQuestions = new ArrayList<>();
-                for (int i = 0; i < questions.size(); i++) {
-                    cn.hutool.json.JSONObject q = questions.getJSONObject(i);
-                    LiveQuestion lq = new LiveQuestion();
-                    lq.setQuestionDimension(q.getStr("questionDimension"));
-                    lq.setQuestion(q.getStr("question"));
-                    lq.setFollowGenerated(false);
-                    liveQuestions.add(lq);
-                }
-                LIVE_QUESTION_MAP.put(mapKey, liveQuestions);
+                List<LiveQuestion> liveQuestions = normalizeLiveQuestionsForInterview(questions, setting.getQuestionCount());
+                String mapKey = studentId + ":" + assessmentId;
+                cacheLiveQuestions(mapKey, studentId, assessmentId, liveQuestions);
                 log.info("现场题目生成完成, studentId:{}, assessmentId:{}, count:{}", studentId, assessmentId, liveQuestions.size());
                 WebsocketManager.sendTextMessage(studentId, WebSocketResponse.of("题目生成完成，请点击获取题目"));
             } catch (Exception e) {
@@ -767,7 +885,7 @@ public class StudentAssessmentService {
             StudentAssessmentQuestionAnswerPO lastAnswer = questionAnswerPOS.getLast();
             if (answeredCount <= questionCount) {
                 String followUpKey = mapKey + ":" + answeredCount;
-                String followUp = FOLLOW_UP_MAP.get(followUpKey);
+                String followUp = getCachedFollowUp(followUpKey, studentId, assessmentId, answeredCount);
                 if (StringUtils.isNotBlank(followUp) && StringUtils.isBlank(lastAnswer.getFollowQuestion())) {
                     // 发送追问
                     GeneratedQuestionDTO followDTO = new GeneratedQuestionDTO();
@@ -785,7 +903,7 @@ public class StudentAssessmentService {
         }
 
         // 从现场生成的题目列表中取下一题
-        List<LiveQuestion> liveQuestions = LIVE_QUESTION_MAP.get(mapKey);
+        List<LiveQuestion> liveQuestions = getCachedLiveQuestions(mapKey, studentId, assessmentId, questionCount);
         if (CollectionUtils.isEmpty(liveQuestions)) {
             // 题目尚未生成完成，提示等待
             consumer.accept(WebSocketResponse.of("题目正在生成中，请稍候再试..."));
@@ -934,6 +1052,7 @@ public class StudentAssessmentService {
         recordService.update(Wrappers.lambdaUpdate(StudentAssessmentRecordPO.class)
                 .set(StudentAssessmentRecordPO::getDefenseResult, JSONUtil.toJsonStr(results))
                 .set(StudentAssessmentRecordPO::getState, 1)
+                .set(StudentAssessmentRecordPO::getReAnalysis, false)
                 .eq(StudentAssessmentRecordPO::getStudentId, studentId)
                 .eq(StudentAssessmentRecordPO::getAssessmentId, assessmentId));
     }
@@ -956,36 +1075,43 @@ public class StudentAssessmentService {
             consumer.accept(WebSocketResponse.ofLast("未找到录音数据"));
             return;
         }
-        byte[] voiceBytes = addWavHeader(byteArrayOutputStream.toByteArray());
-        String voiceUrl = ossManger.uploadVoice(voiceBytes);
-        String generatedQuestionString = (String) redisTemplate.opsForValue().get(RedisConstants.STUDENT_QUESTION.formatted(studentId, assessmentId));
+        String currentQuestionKey = RedisConstants.STUDENT_QUESTION.formatted(studentId, assessmentId);
+        String generatedQuestionString = (String) redisTemplate.opsForValue().get(currentQuestionKey);
         if (generatedQuestionString == null) {
+            VOICE_MAP.remove(studentId);
             consumer.accept(WebSocketResponse.ofLast("题目已过期，请重新获取"));
             return;
         }
+        byte[] voiceBytes = addWavHeader(byteArrayOutputStream.toByteArray());
+        String voiceUrl = ossManger.uploadVoice(voiceBytes);
         GeneratedQuestionDTO questionDTO = JSONUtil.toBean(generatedQuestionString, GeneratedQuestionDTO.class);
         if (questionDTO.getFollow()) {
             // 追问回答
             VOICE_MAP.remove(studentId);
             Optional<StudentAssessmentQuestionAnswerPO> lastQuestionAnswerOp = questionAnswerService.lastQuestionAnswer(studentId, assessmentId);
-            lastQuestionAnswerOp.ifPresent(questionAnswer -> {
-                questionAnswer.setFollowQuestion(questionDTO.getQuestion());
-                questionAnswer.setFollowAnswerVoice(voiceUrl);
-                questionAnswerService.updateById(questionAnswer);
-                consumer.accept(WebSocketResponse.ofLast("结束答题"));
-                threadPoolExecutor.execute(() -> {
-                    try {
-                        String voiceText = getRealtimeVoiceContentOrFallback(studentId, voiceBytes);
-                        questionAnswerService.update(Wrappers.lambdaUpdate(StudentAssessmentQuestionAnswerPO.class)
-                                .set(StudentAssessmentQuestionAnswerPO::getFollowAnswer, voiceText)
-                                .eq(StudentAssessmentQuestionAnswerPO::getId, questionAnswer.getId()));
-                    } catch (Exception e) {
-                        log.error("追问回答转写失败, studentId:{}, assessmentId:{}", studentId, assessmentId, e);
-                        WebsocketManager.sendTextMessage(studentId, WebSocketResponse.of("追问回答处理失败，将进入下一题"));
-                    } finally {
-                        WebsocketManager.sendTextMessage(studentId, WebSocketResponse.of("题目生成完成，请点击获取题目"));
-                    }
-                });
+            if (lastQuestionAnswerOp.isEmpty()) {
+                redisTemplate.delete(currentQuestionKey);
+                consumer.accept(WebSocketResponse.ofLast("未找到上一题记录"));
+                return;
+            }
+            StudentAssessmentQuestionAnswerPO questionAnswer = lastQuestionAnswerOp.get();
+            questionAnswer.setFollowQuestion(questionDTO.getQuestion());
+            questionAnswer.setFollowAnswerVoice(voiceUrl);
+            questionAnswerService.updateById(questionAnswer);
+            redisTemplate.delete(currentQuestionKey);
+            consumer.accept(WebSocketResponse.ofLast("结束答题"));
+            threadPoolExecutor.execute(() -> {
+                try {
+                    String voiceText = getRealtimeVoiceContentOrFallback(studentId, voiceBytes);
+                    questionAnswerService.update(Wrappers.lambdaUpdate(StudentAssessmentQuestionAnswerPO.class)
+                            .set(StudentAssessmentQuestionAnswerPO::getFollowAnswer, voiceText)
+                            .eq(StudentAssessmentQuestionAnswerPO::getId, questionAnswer.getId()));
+                } catch (Exception e) {
+                    log.error("追问回答转写失败, studentId:{}, assessmentId:{}", studentId, assessmentId, e);
+                    WebsocketManager.sendTextMessage(studentId, WebSocketResponse.of("追问回答处理失败，将进入下一题"));
+                } finally {
+                    WebsocketManager.sendTextMessage(studentId, WebSocketResponse.of("题目生成完成，请点击获取题目"));
+                }
             });
         } else {
             // 普通题目回答
@@ -997,7 +1123,7 @@ public class StudentAssessmentService {
                     .build();
             questionAnswerService.save(questionAnswerPO);
             VOICE_MAP.remove(studentId);
-            redisTemplate.delete(RedisConstants.STUDENT_QUESTION.formatted(studentId, assessmentId));
+            redisTemplate.delete(currentQuestionKey);
             consumer.accept(WebSocketResponse.ofLast("结束答题"));
 
             // 异步转写，并在追问生成完成后再通知前端获取下一条题目
@@ -1033,12 +1159,13 @@ public class StudentAssessmentService {
                             if (StringUtils.isBlank(followUp)) {
                                 followUp = buildDefaultFollowUpQuestion(questionDTO.getQuestion());
                             }
-                            FOLLOW_UP_MAP.put(followUpKey, followUp);
+                            cacheFollowUp(followUpKey, studentId, assessmentId, questionIndex, followUp);
                             log.info("追问生成完成, studentId:{}, assessmentId:{}, questionIndex:{}",
                                     studentId, assessmentId, questionIndex);
                         } catch (Exception e) {
                             log.error("追问生成失败, studentId:{}, assessmentId:{}", studentId, assessmentId, e);
-                            FOLLOW_UP_MAP.put(followUpKey, buildDefaultFollowUpQuestion(questionDTO.getQuestion()));
+                            cacheFollowUp(followUpKey, studentId, assessmentId, questionIndex,
+                                    buildDefaultFollowUpQuestion(questionDTO.getQuestion()));
                             WebsocketManager.sendTextMessage(studentId, WebSocketResponse.of("追问生成失败，将使用默认追问"));
                         }
                     } else {
@@ -1131,7 +1258,7 @@ public class StudentAssessmentService {
                                           String followUpKey,
                                           int questionIndex,
                                           String followUp) {
-        FOLLOW_UP_MAP.put(followUpKey, followUp);
+        cacheFollowUp(followUpKey, studentId, assessmentId, questionIndex, followUp);
         GeneratedQuestionDTO followDTO = new GeneratedQuestionDTO();
         followDTO.setQuestion(followUp);
         followDTO.setFollow(true);
@@ -1320,13 +1447,8 @@ public class StudentAssessmentService {
             AssessmentEvaluationDTO evaluation = JSONUtil.toBean(defenseResult, AssessmentEvaluationDTO.class);
             evaluation.fillEmptyValue(quesitonAnswerIdMap, record);
             Integer checkScore = record.getCheckScore();
-            int totalScore;
             List<ValueDTO> value = evaluation.getValue();
-            if (checkScore > 0) {
-                totalScore = checkScore;
-            } else {
-                totalScore = value.stream().mapToInt(ValueDTO::getValue).sum();
-            }
+            int totalScore = resolveDisplayScore(checkScore, value);
             DefenseDTO defense = evaluation.getDefense();
             if (defense != null) {
                 defense.setDefenseAnswer(record.getDefenseContent());

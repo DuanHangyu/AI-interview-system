@@ -20,6 +20,11 @@ let player = null;
 let socketVoice = null;
 let heartbeatInterval = null;
 let ignorePayloadUntilEnd = false;
+let ignorePayloadTimer = null;
+let manuallyClosed = false;
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
 
 function resetPlaybackState() {
   audioLength.value = 0;
@@ -30,6 +35,25 @@ function resetPlaybackState() {
     clearInterval(timer.value);
     timer.value = null;
   }
+}
+
+function clearIgnorePayload() {
+  ignorePayloadUntilEnd = false;
+  if (ignorePayloadTimer) {
+    clearTimeout(ignorePayloadTimer);
+    ignorePayloadTimer = null;
+  }
+}
+
+function ignorePayloadsUntilEndOrTimeout() {
+  ignorePayloadUntilEnd = true;
+  if (ignorePayloadTimer) {
+    clearTimeout(ignorePayloadTimer);
+  }
+  ignorePayloadTimer = setTimeout(() => {
+    ignorePayloadUntilEnd = false;
+    ignorePayloadTimer = null;
+  }, 5000);
 }
 
 function broadcastingEnd() {
@@ -116,7 +140,7 @@ function handleAudioPayload(payload) {
 
 function handleAudioEnd() {
   if (ignorePayloadUntilEnd) {
-    ignorePayloadUntilEnd = false;
+    clearIgnorePayload();
     resetPlaybackState();
     return;
   }
@@ -150,9 +174,29 @@ function stopHeartbeat() {
   }
 }
 
+function scheduleReconnect() {
+  if (manuallyClosed || reconnectTimer || reconnectAttempts >= maxReconnectAttempts) {
+    return;
+  }
+  reconnectAttempts += 1;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connectVoiceSocket();
+  }, Math.min(1000 * reconnectAttempts, 5000));
+}
+
+function closeSocket() {
+  if (socketVoice) {
+    try {
+      socketVoice.close(1000, "Client close");
+    } catch (e) {}
+    socketVoice = null;
+  }
+}
+
 const stopVoice = () => {
   if (audioLength.value > 0) {
-    ignorePayloadUntilEnd = true;
+    ignorePayloadsUntilEndOrTimeout();
   }
 
   if (player) {
@@ -167,13 +211,18 @@ const stopVoice = () => {
   resetPlaybackState();
 };
 
-onMounted(() => {
+function connectVoiceSocket() {
+  if (manuallyClosed) {
+    return;
+  }
+  closeSocket();
   socketVoice = new WebSocket(
     `${process.env.VUE_APP_BASE_PLAYVOICE_WS}`,
     getToken()
   );
 
   socketVoice.addEventListener("open", () => {
+    reconnectAttempts = 0;
     emit("ready");
     startHeartbeat();
   });
@@ -195,13 +244,41 @@ onMounted(() => {
       handleAudioPayload(event.data);
     }
   });
+
+  socketVoice.addEventListener("error", (event) => {
+    console.warn("voice playback websocket error", event);
+  });
+
+  socketVoice.addEventListener("close", () => {
+    stopHeartbeat();
+    clearIgnorePayload();
+    if (audioLength.value > 0 && !ignorePayloadUntilEnd) {
+      if (player) {
+        player.destroy();
+        player = null;
+      }
+      broadcastingEnd();
+    }
+    if (!manuallyClosed) {
+      scheduleReconnect();
+    }
+  });
+}
+
+onMounted(() => {
+  manuallyClosed = false;
+  connectVoiceSocket();
 });
 
 onUnmounted(() => {
-  stopVoice();
-  if (socketVoice?.readyState === WebSocket.OPEN) {
-    socketVoice.close();
+  manuallyClosed = true;
+  clearIgnorePayload();
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
   }
+  stopVoice();
+  closeSocket();
   stopHeartbeat();
 });
 

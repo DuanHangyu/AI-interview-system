@@ -171,6 +171,7 @@ const isReady = ref(false);
 const isVoiceReady = ref(false);
 const isGenQuestion = ref(false);
 const audioStatus = ref(false);
+let voiceFallbackTimer: number | undefined = undefined;
 
 // 心跳间隔（毫秒）
 const HEARTBEAT_INTERVAL = 5000; // 30秒
@@ -186,8 +187,29 @@ const pageOff = ref(false);
 
 const isPlaying = ref(false);
 
+function clearVoiceFallbackTimer() {
+  if (voiceFallbackTimer) {
+    clearTimeout(voiceFallbackTimer);
+    voiceFallbackTimer = undefined;
+  }
+}
+
+function scheduleVoiceFallbackStart() {
+  clearVoiceFallbackTimer();
+  voiceFallbackTimer = setTimeout(() => {
+    voiceFallbackTimer = undefined;
+    if (!audioStatus.value && !isPlaying.value && !isGenQuestion.value) {
+      console.warn("题目播报未开始，自动进入答题状态");
+      broadcastingEnd();
+    }
+  }, 10000);
+}
+
 const updatePlaying = (e: boolean) => {
   isPlaying.value = e;
+  if (e) {
+    clearVoiceFallbackTimer();
+  }
   // if (isPlaying.value == false) {
   //   if (audioStatus.value) {
   //     stopAudio();
@@ -200,6 +222,7 @@ const updatePlaying = (e: boolean) => {
 };
 
 const broadcastingEnd = () => {
+  clearVoiceFallbackTimer();
   if (audioStatus.value) {
     stopAudio();
     audioStatus.value = false;
@@ -279,6 +302,7 @@ const connect = () => {
             } else {
               questionList.value?.push(content);
             }
+            scheduleVoiceFallbackStart();
             // startAnswerQuestions();
           }
         }
@@ -378,6 +402,7 @@ function startAnswerQuestions() {
 }
 
 function endQuestionEarly() {
+  clearVoiceFallbackTimer();
   if (detail.value?.answerTime - answerTime.value < 4) {
     return;
   }
@@ -408,6 +433,7 @@ function endQuestionEarly() {
 }
 
 function generateQuestions() {
+  clearVoiceFallbackTimer();
   // if (
   //   questionList.value?.[questionList?.value?.length - 1]?.index >=
   //   detail.value?.questionCount
@@ -428,6 +454,7 @@ function generateQuestions() {
 }
 
 function overAssessment() {
+  clearVoiceFallbackTimer();
   isGenQuestion.value = false;
   if (audioStatus.value) {
     stopAudio();
@@ -462,6 +489,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   pageOff.value = true;
+  clearVoiceFallbackTimer();
   stopCamera();
   // closeAudio();
   clearInterval(answerTimer);
