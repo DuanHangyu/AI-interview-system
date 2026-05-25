@@ -74,4 +74,35 @@ class RealtimeSpeechEventFactoryTest {
         assertThat(root.path("response").path("modalities").get(1).asText()).isEqualTo("audio");
         assertThat(root.path("response").path("instructions").asText()).contains("什么是缓存");
     }
+
+    @Test
+    void buildsRealtimeInterviewSessionUpdateForAudioResponse() throws Exception {
+        String json = factory.realtimeInterviewSessionUpdate("Ethan", "你是AI面试官。");
+
+        JsonNode root = objectMapper.readTree(json);
+
+        assertThat(root.path("type").asText()).isEqualTo("session.update");
+        assertThat(root.path("session").path("modalities").get(0).asText()).isEqualTo("text");
+        assertThat(root.path("session").path("modalities").get(1).asText()).isEqualTo("audio");
+        assertThat(root.path("session").path("voice").asText()).isEqualTo("Ethan");
+        assertThat(root.path("session").path("turn_detection").isNull()).isTrue();
+        assertThat(root.path("session").path("input_audio_transcription").path("model").asText())
+                .isEqualTo("qwen3-asr-flash-realtime");
+        assertThat(root.path("session").path("instructions").asText()).contains("AI面试官");
+    }
+
+    @Test
+    void extractsRealtimeResponseEvents() {
+        assertThat(factory.extractResponseAudioDelta("""
+                {"type":"response.audio.delta","delta":"AQID"}
+                """)).contains(new byte[]{1, 2, 3});
+
+        assertThat(factory.extractResponseTranscriptDone("""
+                {"type":"response.audio_transcript.done","transcript":"请补充说明你的依据。"}
+                """)).contains("请补充说明你的依据。");
+
+        assertThat(factory.isResponseDone("""
+                {"type":"response.done"}
+                """)).isTrue();
+    }
 }
