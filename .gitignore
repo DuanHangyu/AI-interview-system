@@ -1,5 +1,8 @@
 .DS_Store
 *.log
+.env.local
+.env.*.local
+.run/
 
 # Local tooling output
 .playwright-mcp/

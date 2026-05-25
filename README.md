@@ -5,21 +5,24 @@ AI 面试系统，包含后端 `defense-assessment` 和前端 `defense-system`�
 ## Backend
 
 ```bash
-cd defense-assessment
-export DASHSCOPE_API_KEY=your_dashscope_key
-export DB_PASSWORD=your_db_password
-export REDIS_PASSWORD=your_redis_password
-export ALIYUN_OSS_ACCESS_KEY_ID=your_oss_access_key_id
-export ALIYUN_OSS_ACCESS_KEY_SECRET=your_oss_access_key_secret
-./mvnw spring-boot:run -Dspring-boot.run.profiles=local
+cp .env.example .env.local
+# Fill .env.local with local secrets, then:
+./scripts/start-backend.sh
 ```
 
 ## Frontend
 
 ```bash
-cd defense-system
-npm install
-npm run dev
+npm --prefix defense-system install
+./scripts/start-frontend.sh
 ```
 
 默认前端本地地址：`http://localhost:3004/`。
+
+## Local Restart
+
+```bash
+./scripts/restart-local.sh
+```
+
+本地密钥统一放在根目录 `.env.local`，该文件已被 Git 忽略。
