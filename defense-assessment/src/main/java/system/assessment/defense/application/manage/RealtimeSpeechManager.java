@@ -79,6 +79,10 @@ public class RealtimeSpeechManager {
         okHttpClient.newWebSocket(request, new WebSocketListener() {
             @Override
             public void onOpen(@NotNull WebSocket webSocket, @NotNull Response response) {
+                if (session.isClosed() || sessions.get(studentId) != session) {
+                    webSocket.close(1000, "client already closed");
+                    return;
+                }
                 session.upstream = webSocket;
                 session.open.set(true);
                 webSocket.send(eventFactory.sessionUpdate(realtimeVoice, INTERVIEW_TRANSCRIPTION_INSTRUCTIONS));
@@ -189,6 +193,7 @@ public class RealtimeSpeechManager {
         private final Integer studentId;
         private final WebSocketSession clientSession;
         private final AtomicBoolean open = new AtomicBoolean(false);
+        private final AtomicBoolean closed = new AtomicBoolean(false);
         private volatile WebSocket upstream;
         private volatile CompletableFuture<String> transcriptFuture = new CompletableFuture<>();
 
@@ -198,7 +203,11 @@ public class RealtimeSpeechManager {
         }
 
         private boolean isOpen() {
-            return open.get() && upstream != null;
+            return !closed.get() && open.get() && upstream != null;
+        }
+
+        private boolean isClosed() {
+            return closed.get();
         }
 
         private synchronized void startTurn() {
@@ -219,6 +228,7 @@ public class RealtimeSpeechManager {
         }
 
         private void close() {
+            closed.set(true);
             open.set(false);
             WebSocket webSocket = upstream;
             if (webSocket != null) {
