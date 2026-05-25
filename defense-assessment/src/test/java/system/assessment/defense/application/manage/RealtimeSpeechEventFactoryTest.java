@@ -48,4 +48,30 @@ class RealtimeSpeechEventFactoryTest {
 
         assertThat(transcript).contains("学生回答文本");
     }
+
+    @Test
+    void buildsAudioOutputSessionUpdateForQuestionVoice() throws Exception {
+        String json = factory.audioOutputSessionUpdate("Cherry", "请朗读题目。");
+
+        JsonNode root = objectMapper.readTree(json);
+
+        assertThat(root.path("type").asText()).isEqualTo("session.update");
+        assertThat(root.path("session").path("modalities").get(0).asText()).isEqualTo("text");
+        assertThat(root.path("session").path("modalities").get(1).asText()).isEqualTo("audio");
+        assertThat(root.path("session").path("voice").asText()).isEqualTo("Cherry");
+        assertThat(root.path("session").path("output_audio_format").asText()).isEqualTo("pcm");
+        assertThat(root.path("session").path("turn_detection").isNull()).isTrue();
+    }
+
+    @Test
+    void buildsResponseCreateForQuestionVoice() throws Exception {
+        String json = factory.responseCreateForAudio("请朗读：什么是缓存？");
+
+        JsonNode root = objectMapper.readTree(json);
+
+        assertThat(root.path("type").asText()).isEqualTo("response.create");
+        assertThat(root.path("response").path("modalities").get(0).asText()).isEqualTo("text");
+        assertThat(root.path("response").path("modalities").get(1).asText()).isEqualTo("audio");
+        assertThat(root.path("response").path("instructions").asText()).contains("什么是缓存");
+    }
 }
