@@ -22,5 +22,7 @@ elif [[ -d "/Users/duanhangyu/.homebrew/Cellar/openjdk@21/21.0.11/libexec/openjd
   export PATH="$JAVA_HOME/bin:$PATH"
 fi
 
+"$ROOT_DIR/scripts/start-db-tunnel.sh"
+
 cd "$ROOT_DIR/defense-assessment"
 exec ./mvnw spring-boot:run -Dspring-boot.run.profiles="${SPRING_PROFILE:-local}"
