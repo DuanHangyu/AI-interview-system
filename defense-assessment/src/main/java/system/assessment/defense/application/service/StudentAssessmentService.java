@@ -43,6 +43,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -803,16 +805,7 @@ public class StudentAssessmentService {
 
     private void sendQuestionToStudent(GeneratedQuestionDTO question, Integer studentId, Integer assessmentId,
                                         int index, int total, Consumer<WebSocketResponse> consumer) {
-        QuestionDTO questionDTO = QuestionDTO.builder()
-                .index(index)
-                .total(total)
-                .title(question.getQuestion())
-                .follow(question.getFollow())
-                .last(index >= total)
-                .build();
-        redisTemplate.opsForValue().set(RedisConstants.STUDENT_QUESTION.formatted(studentId, assessmentId),
-                JSONUtil.toJsonStr(question), 10, TimeUnit.MINUTES);
-        consumer.accept(WebSocketResponse.of(JSONUtil.toJsonStr(questionDTO)));
+        sendQuestionTextToStudent(question, studentId, assessmentId, index, total, consumer);
 
         WebsocketManager.startVoiceSending(studentId);
         try {
@@ -830,6 +823,20 @@ public class StudentAssessmentService {
             WebsocketManager.sendVoiceEnd(studentId);
             WebsocketManager.finishVoiceSending(studentId);
         }
+    }
+
+    private void sendQuestionTextToStudent(GeneratedQuestionDTO question, Integer studentId, Integer assessmentId,
+                                           int index, int total, Consumer<WebSocketResponse> consumer) {
+        QuestionDTO questionDTO = QuestionDTO.builder()
+                .index(index)
+                .total(total)
+                .title(question.getQuestion())
+                .follow(question.getFollow())
+                .last(index >= total)
+                .build();
+        redisTemplate.opsForValue().set(RedisConstants.STUDENT_QUESTION.formatted(studentId, assessmentId),
+                JSONUtil.toJsonStr(question), 10, TimeUnit.MINUTES);
+        consumer.accept(WebSocketResponse.of(JSONUtil.toJsonStr(questionDTO)));
     }
 
     private void sendEndMessage(int answeredCount, int questionCount, Consumer<WebSocketResponse> consumer) {
@@ -995,18 +1002,28 @@ public class StudentAssessmentService {
 
             // 异步转写，并在追问生成完成后再通知前端获取下一条题目
             threadPoolExecutor.execute(() -> {
+                AtomicBoolean directFollowUpSent = new AtomicBoolean(false);
                 try {
-                    String voiceText = getRealtimeVoiceContentOrFallback(studentId, voiceBytes);
-                    questionAnswerService.update(Wrappers.lambdaUpdate(StudentAssessmentQuestionAnswerPO.class)
-                            .set(StudentAssessmentQuestionAnswerPO::getAnswer, voiceText)
-                            .eq(StudentAssessmentQuestionAnswerPO::getId, questionAnswerPO.getId()));
-
                     AssessmentSettingPO setting = settingService.getById(assessmentId);
                     if (Objects.equals(setting.getFollowUp(), true)) {
                         List<StudentAssessmentQuestionAnswerPO> answers = questionAnswerService.listByAssessmentIdAndStudentId(assessmentId, studentId);
                         int questionIndex = answers.size();
                         String followUpKey = studentId + ":" + assessmentId + ":" + questionIndex;
                         WebsocketManager.sendTextMessage(studentId, WebSocketResponse.of("正在生成追问，请稍候..."));
+                        AtomicReference<String> realtimeAnswerText = new AtomicReference<>();
+                        if (tryGenerateAndSendRealtimeFollowUp(studentId, assessmentId, setting, questionDTO,
+                                followUpKey, questionIndex, realtimeAnswerText)) {
+                            String voiceText = realtimeAnswerOrFallback(realtimeAnswerText.get(), voiceBytes);
+                            questionAnswerService.update(Wrappers.lambdaUpdate(StudentAssessmentQuestionAnswerPO.class)
+                                    .set(StudentAssessmentQuestionAnswerPO::getAnswer, voiceText)
+                                    .eq(StudentAssessmentQuestionAnswerPO::getId, questionAnswerPO.getId()));
+                            directFollowUpSent.set(true);
+                            return;
+                        }
+                        String voiceText = realtimeAnswerOrFallback(realtimeAnswerText.get(), voiceBytes);
+                        questionAnswerService.update(Wrappers.lambdaUpdate(StudentAssessmentQuestionAnswerPO.class)
+                                .set(StudentAssessmentQuestionAnswerPO::getAnswer, voiceText)
+                                .eq(StudentAssessmentQuestionAnswerPO::getId, questionAnswerPO.getId()));
                         try {
                             String followUp = geminiManager.generateFollowUp(
                                     questionDTO.getQuestion(),
@@ -1024,15 +1041,140 @@ public class StudentAssessmentService {
                             FOLLOW_UP_MAP.put(followUpKey, buildDefaultFollowUpQuestion(questionDTO.getQuestion()));
                             WebsocketManager.sendTextMessage(studentId, WebSocketResponse.of("追问生成失败，将使用默认追问"));
                         }
+                    } else {
+                        String voiceText = getRealtimeVoiceContentOrFallback(studentId, voiceBytes);
+                        questionAnswerService.update(Wrappers.lambdaUpdate(StudentAssessmentQuestionAnswerPO.class)
+                                .set(StudentAssessmentQuestionAnswerPO::getAnswer, voiceText)
+                                .eq(StudentAssessmentQuestionAnswerPO::getId, questionAnswerPO.getId()));
                     }
                 } catch (Exception e) {
                     log.error("普通题回答处理失败, studentId:{}, assessmentId:{}", studentId, assessmentId, e);
                     WebsocketManager.sendTextMessage(studentId, WebSocketResponse.of("答题处理失败，将进入下一题"));
                 } finally {
-                    WebsocketManager.sendTextMessage(studentId, WebSocketResponse.of("题目生成完成，请点击获取题目"));
+                    if (!directFollowUpSent.get()) {
+                        WebsocketManager.sendTextMessage(studentId, WebSocketResponse.of("题目生成完成，请点击获取题目"));
+                    }
                 }
             });
         }
+    }
+
+    private String realtimeAnswerOrFallback(String realtimeAnswerText, byte[] voiceBytes) {
+        if (StringUtils.isNotBlank(realtimeAnswerText)) {
+            return realtimeAnswerText;
+        }
+        return getVoiceContent(voiceBytes);
+    }
+
+    private boolean tryGenerateAndSendRealtimeFollowUp(Integer studentId,
+                                                       Integer assessmentId,
+                                                       AssessmentSettingPO setting,
+                                                       GeneratedQuestionDTO originalQuestion,
+                                                       String followUpKey,
+                                                       int questionIndex,
+                                                       AtomicReference<String> answerTextRef) {
+        AtomicBoolean sentToStudent = new AtomicBoolean(false);
+        AtomicReference<String> followUpRef = new AtomicReference<>();
+        WebsocketManager.startVoiceSending(studentId);
+        try {
+            Optional<RealtimeSpeechManager.RealtimeTurnResponse> response = realtimeSpeechManager.completeTurnAndStreamResponse(
+                    studentId,
+                    answerText -> {
+                        answerTextRef.set(answerText);
+                        return buildRealtimeFollowUpInstructions(originalQuestion.getQuestion(), answerText,
+                                StringUtils.defaultIfBlank(setting.getFollowUpStandards(), setting.getFollowUpPrompt()));
+                    },
+                    chunk -> {
+                        if (!WebsocketManager.isVoiceSendingInterrupted(studentId)) {
+                            WebsocketManager.sendVoiceChunk(chunk, studentId);
+                        }
+                    },
+                    transcript -> {
+                        String followUp = normalizeFollowUpQuestion(transcript, originalQuestion.getQuestion());
+                        followUpRef.set(followUp);
+                        sendRealtimeFollowUpText(studentId, assessmentId, setting, followUpKey, questionIndex, followUp);
+                        sentToStudent.set(true);
+                    }
+            );
+
+            String followUp = response
+                    .map(RealtimeSpeechManager.RealtimeTurnResponse::responseTranscript)
+                    .filter(StringUtils::isNotBlank)
+                    .map(text -> normalizeFollowUpQuestion(text, originalQuestion.getQuestion()))
+                    .orElseGet(followUpRef::get);
+            response.map(RealtimeSpeechManager.RealtimeTurnResponse::inputTranscript)
+                    .filter(StringUtils::isNotBlank)
+                    .ifPresent(answerTextRef::set);
+            if (StringUtils.isBlank(followUp)) {
+                return false;
+            }
+            if (!sentToStudent.get()) {
+                sendRealtimeFollowUpText(studentId, assessmentId, setting, followUpKey, questionIndex, followUp);
+                sentToStudent.set(true);
+            }
+            log.info("Realtime追问生成完成, studentId:{}, assessmentId:{}, questionIndex:{}, hasAudio:{}",
+                    studentId, assessmentId, questionIndex, response.map(RealtimeSpeechManager.RealtimeTurnResponse::hasAudio).orElse(false));
+            return true;
+        } catch (Exception e) {
+            log.warn("Realtime追问生成失败, studentId:{}, assessmentId:{}, error:{}",
+                    studentId, assessmentId, e.getMessage());
+            return false;
+        } finally {
+            WebsocketManager.sendVoiceEnd(studentId);
+            WebsocketManager.finishVoiceSending(studentId);
+        }
+    }
+
+    private void sendRealtimeFollowUpText(Integer studentId,
+                                          Integer assessmentId,
+                                          AssessmentSettingPO setting,
+                                          String followUpKey,
+                                          int questionIndex,
+                                          String followUp) {
+        FOLLOW_UP_MAP.put(followUpKey, followUp);
+        GeneratedQuestionDTO followDTO = new GeneratedQuestionDTO();
+        followDTO.setQuestion(followUp);
+        followDTO.setFollow(true);
+        sendQuestionTextToStudent(followDTO, studentId, assessmentId, questionIndex, setting.getQuestionCount(),
+                response -> WebsocketManager.sendTextMessage(studentId, response));
+    }
+
+    private String buildRealtimeFollowUpInstructions(String originalQuestion, String answerText, String followUpStandards) {
+        return """
+                你是正在进行大学综合答辩的AI面试官。请基于学生刚才的语音回答，直接生成一个追问问题，并用清晰自然的中文语音说出来。
+
+                要求：
+                1. 只输出追问问题本身，不要解释、不要编号、不要输出JSON或Markdown。
+                2. 必须围绕原问题和学生回答继续深入，不要更换无关主题。
+                3. 优先追问依据、实现细节、验证数据、关键技术、对比逻辑或学生回答中含糊的地方。
+                4. 语言简洁明确，适合作为面试现场的一句话追问。
+
+                【原问题】
+                %s
+
+                【学生回答自动转写】
+                %s
+
+                【追问标准】
+                %s
+                """.formatted(
+                StringUtils.defaultIfBlank(originalQuestion, "无"),
+                StringUtils.defaultIfBlank(answerText, "以刚才的语音回答为准"),
+                StringUtils.defaultIfBlank(followUpStandards, "围绕回答继续深入追问")
+        );
+    }
+
+    private String normalizeFollowUpQuestion(String text, String originalQuestion) {
+        String followUp = StringUtils.trimToEmpty(text);
+        if (followUp.startsWith("```")) {
+            int startIdx = followUp.indexOf('\n') + 1;
+            int endIdx = followUp.lastIndexOf("```");
+            if (startIdx > 0 && endIdx > startIdx) {
+                followUp = followUp.substring(startIdx, endIdx).trim();
+            }
+        }
+        followUp = StringUtils.strip(followUp, "\"'“”‘’");
+        return StringUtils.defaultIfBlank(followUp, buildDefaultFollowUpQuestion(originalQuestion));
     }
 
     private String buildDefaultFollowUpQuestion(String originalQuestion) {

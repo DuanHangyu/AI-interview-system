@@ -41,6 +41,23 @@ public class RealtimeSpeechEventFactory {
         ));
     }
 
+    public String realtimeInterviewSessionUpdate(String voice, String instructions) {
+        Map<String, Object> session = new LinkedHashMap<>();
+        session.put("modalities", List.of("text", "audio"));
+        session.put("voice", StringUtils.defaultIfBlank(voice, "Ethan"));
+        session.put("input_audio_format", "pcm");
+        session.put("output_audio_format", "pcm");
+        session.put("instructions", StringUtils.defaultIfBlank(instructions, "你是AI面试官，请根据学生回答继续追问。"));
+        session.put("turn_detection", null);
+        session.put("input_audio_transcription", Map.of("model", TRANSCRIPTION_MODEL));
+
+        return toJson(Map.of(
+                "event_id", eventId(),
+                "type", "session.update",
+                "session", session
+        ));
+    }
+
     public String audioOutputSessionUpdate(String voice, String instructions) {
         Map<String, Object> session = new LinkedHashMap<>();
         session.put("modalities", List.of("text", "audio"));
@@ -101,6 +118,46 @@ public class RealtimeSpeechEventFactory {
             return StringUtils.isBlank(transcript) ? Optional.empty() : Optional.of(transcript.trim());
         } catch (IOException e) {
             return Optional.empty();
+        }
+    }
+
+    public Optional<byte[]> extractResponseAudioDelta(String serverEvent) {
+        try {
+            JsonNode root = objectMapper.readTree(serverEvent);
+            if (!Objects.equals(root.path("type").asText(), "response.audio.delta")) {
+                return Optional.empty();
+            }
+            String delta = root.path("delta").asText("");
+            return StringUtils.isBlank(delta) ? Optional.empty() : Optional.of(Base64.getDecoder().decode(delta));
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+    }
+
+    public Optional<String> extractResponseTranscriptDone(String serverEvent) {
+        try {
+            JsonNode root = objectMapper.readTree(serverEvent);
+            String type = root.path("type").asText("");
+            if (Objects.equals(type, "response.audio_transcript.done")) {
+                String transcript = root.path("transcript").asText("");
+                return StringUtils.isBlank(transcript) ? Optional.empty() : Optional.of(transcript.trim());
+            }
+            if (Objects.equals(type, "response.text.done")) {
+                String text = root.path("text").asText("");
+                return StringUtils.isBlank(text) ? Optional.empty() : Optional.of(text.trim());
+            }
+            return Optional.empty();
+        } catch (IOException e) {
+            return Optional.empty();
+        }
+    }
+
+    public boolean isResponseDone(String serverEvent) {
+        try {
+            JsonNode root = objectMapper.readTree(serverEvent);
+            return Objects.equals(root.path("type").asText(), "response.done");
+        } catch (IOException e) {
+            return false;
         }
     }
 

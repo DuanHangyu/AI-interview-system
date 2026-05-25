@@ -1,5 +1,7 @@
 package system.assessment.defense.application.manage;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Request;
@@ -16,6 +18,7 @@ import org.springframework.web.socket.WebSocketSession;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -23,6 +26,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 @Component
 @RequiredArgsConstructor
@@ -32,10 +37,12 @@ public class RealtimeSpeechManager {
     private static final String INTERVIEW_TRANSCRIPTION_INSTRUCTIONS = """
             你是 AI 面试系统的实时语音转写助手。
             只转写学生正在回答面试题或答辩内容的语音，保持原意，不总结、不补充、不回答问题。
+            当系统显式请求你生成面试官回复时，你才作为面试官基于刚才的学生回答直接生成简洁追问。
             如果听不清，请尽量转写可确认的内容。
             """;
 
     private final okhttp3.OkHttpClient okHttpClient;
+    private final ObjectMapper objectMapper;
     private final RealtimeSpeechEventFactory eventFactory;
 
     private final Map<Integer, RealtimeSpeechSession> sessions = new ConcurrentHashMap<>();
@@ -49,7 +56,7 @@ public class RealtimeSpeechManager {
     @Value("${dashscope.realtime.url:wss://dashscope.aliyuncs.com/api-ws/v1/realtime}")
     private String realtimeUrl;
 
-    @Value("${dashscope.realtime.model:qwen3.5-omni-plus-realtime}")
+    @Value("${dashscope.realtime.model:qwen3.5-omni-flash-realtime}")
     private String realtimeModel;
 
     @Value("${dashscope.realtime.voice:Ethan}")
@@ -57,6 +64,9 @@ public class RealtimeSpeechManager {
 
     @Value("${dashscope.realtime.transcript-wait-ms:5000}")
     private long transcriptWaitMs;
+
+    @Value("${dashscope.realtime.response-wait-ms:20000}")
+    private long responseWaitMs;
 
     public void open(Integer studentId, WebSocketSession clientSession) {
         if (!enabled) {
@@ -85,7 +95,7 @@ public class RealtimeSpeechManager {
                 }
                 session.upstream = webSocket;
                 session.open.set(true);
-                webSocket.send(eventFactory.sessionUpdate(realtimeVoice, INTERVIEW_TRANSCRIPTION_INSTRUCTIONS));
+                webSocket.send(eventFactory.realtimeInterviewSessionUpdate(realtimeVoice, INTERVIEW_TRANSCRIPTION_INSTRUCTIONS));
                 log.info("Realtime speech connected, studentId:{}, model:{}", studentId, realtimeModel);
             }
 
@@ -151,6 +161,52 @@ public class RealtimeSpeechManager {
         }
     }
 
+    public Optional<RealtimeTurnResponse> completeTurnAndStreamResponse(Integer studentId,
+                                                                        String responseInstructions,
+                                                                        Consumer<byte[]> audioChunkConsumer,
+                                                                        Consumer<String> responseTranscriptDoneConsumer) {
+        return completeTurnAndStreamResponse(studentId, ignored -> responseInstructions,
+                audioChunkConsumer, responseTranscriptDoneConsumer);
+    }
+
+    public Optional<RealtimeTurnResponse> completeTurnAndStreamResponse(Integer studentId,
+                                                                        Function<String, String> responseInstructionsFactory,
+                                                                        Consumer<byte[]> audioChunkConsumer,
+                                                                        Consumer<String> responseTranscriptDoneConsumer) {
+        RealtimeSpeechSession session = sessions.get(studentId);
+        if (session == null || !session.isOpen()) {
+            return Optional.empty();
+        }
+
+        session.send(eventFactory.inputAudioCommit());
+        String inputTranscript = "";
+        try {
+            inputTranscript = session.transcriptFuture.get(transcriptWaitMs, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            log.warn("Realtime transcript timeout before response, studentId:{}, waitMs:{}", studentId, transcriptWaitMs);
+        } catch (Exception e) {
+            log.warn("Realtime transcript unavailable before response, studentId:{}, reason:{}", studentId, e.getMessage());
+        }
+
+        session.startAssistantResponse(inputTranscript, audioChunkConsumer, responseTranscriptDoneConsumer);
+        String responseInstructions = responseInstructionsFactory != null
+                ? responseInstructionsFactory.apply(inputTranscript)
+                : null;
+        session.send(eventFactory.responseCreateForAudio(responseInstructions));
+        try {
+            return Optional.of(session.responseFuture.get(responseWaitMs, TimeUnit.MILLISECONDS));
+        } catch (TimeoutException e) {
+            log.warn("Realtime response timeout, studentId:{}, waitMs:{}", studentId, responseWaitMs);
+            session.notifyResponseTranscriptIfPossible();
+            return Optional.of(session.snapshotResponse());
+        } catch (Exception e) {
+            log.warn("Realtime response unavailable, studentId:{}, reason:{}", studentId, e.getMessage());
+            return Optional.empty();
+        } finally {
+            session.clearAssistantResponseHandlers();
+        }
+    }
+
     public void close(Integer studentId) {
         RealtimeSpeechSession session = sessions.remove(studentId);
         if (session != null) {
@@ -164,9 +220,40 @@ public class RealtimeSpeechManager {
 
     private void handleServerEvent(RealtimeSpeechSession session, String text) {
         eventFactory.extractCompletedTranscript(text).ifPresent(transcript -> {
-            session.complete(transcript);
+            session.completeTranscript(transcript);
             sendClientTranscript(session.clientSession, transcript);
         });
+
+        try {
+            JsonNode root = objectMapper.readTree(text);
+            String type = root.path("type").asText("");
+            switch (type) {
+                case "response.audio.delta" -> {
+                    String delta = root.path("delta").asText("");
+                    if (StringUtils.isNotBlank(delta)) {
+                        session.acceptResponseAudio(Base64.getDecoder().decode(delta));
+                    }
+                }
+                case "response.audio_transcript.delta", "response.text.delta" -> {
+                    String delta = root.path("delta").asText("");
+                    session.appendResponseTranscript(delta);
+                }
+                case "response.audio_transcript.done" -> {
+                    String transcript = root.path("transcript").asText("");
+                    session.finishResponseTranscript(transcript);
+                }
+                case "response.text.done" -> {
+                    String transcript = root.path("text").asText("");
+                    session.finishResponseTranscript(transcript);
+                }
+                case "response.done" -> session.completeResponse();
+                case "error" -> session.completeResponseExceptionally(new IllegalStateException(root.path("error").toString()));
+                default -> {
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Realtime response event parse failed, session:{}, error:{}", session, e.getMessage());
+        }
     }
 
     private void sendClientTranscript(WebSocketSession clientSession, String transcript) {
@@ -196,6 +283,13 @@ public class RealtimeSpeechManager {
         private final AtomicBoolean closed = new AtomicBoolean(false);
         private volatile WebSocket upstream;
         private volatile CompletableFuture<String> transcriptFuture = new CompletableFuture<>();
+        private volatile CompletableFuture<RealtimeTurnResponse> responseFuture = new CompletableFuture<>();
+        private volatile Consumer<byte[]> responseAudioConsumer;
+        private volatile Consumer<String> responseTranscriptDoneConsumer;
+        private volatile String inputTranscript = "";
+        private final StringBuilder responseTranscriptBuilder = new StringBuilder();
+        private final AtomicBoolean responseTranscriptNotified = new AtomicBoolean(false);
+        private final AtomicBoolean hasResponseAudio = new AtomicBoolean(false);
 
         private RealtimeSpeechSession(Integer studentId, WebSocketSession clientSession) {
             this.studentId = studentId;
@@ -212,6 +306,13 @@ public class RealtimeSpeechManager {
 
         private synchronized void startTurn() {
             transcriptFuture = new CompletableFuture<>();
+            responseFuture = new CompletableFuture<>();
+            inputTranscript = "";
+            synchronized (responseTranscriptBuilder) {
+                responseTranscriptBuilder.setLength(0);
+            }
+            responseTranscriptNotified.set(false);
+            hasResponseAudio.set(false);
         }
 
         private boolean send(String eventJson) {
@@ -219,12 +320,93 @@ public class RealtimeSpeechManager {
             return webSocket != null && webSocket.send(eventJson);
         }
 
-        private void complete(String transcript) {
+        private void completeTranscript(String transcript) {
+            inputTranscript = transcript;
             transcriptFuture.complete(transcript);
         }
 
         private void completeExceptionally(Throwable t) {
             transcriptFuture.completeExceptionally(t);
+            completeResponseExceptionally(t);
+        }
+
+        private synchronized void startAssistantResponse(String transcript,
+                                                         Consumer<byte[]> audioConsumer,
+                                                         Consumer<String> transcriptDoneConsumer) {
+            inputTranscript = StringUtils.defaultString(transcript);
+            responseFuture = new CompletableFuture<>();
+            responseAudioConsumer = audioConsumer;
+            responseTranscriptDoneConsumer = transcriptDoneConsumer;
+            synchronized (responseTranscriptBuilder) {
+                responseTranscriptBuilder.setLength(0);
+            }
+            responseTranscriptNotified.set(false);
+            hasResponseAudio.set(false);
+        }
+
+        private void acceptResponseAudio(byte[] audio) {
+            if (audio == null || audio.length == 0) {
+                return;
+            }
+            hasResponseAudio.set(true);
+            Consumer<byte[]> consumer = responseAudioConsumer;
+            if (consumer != null) {
+                consumer.accept(audio);
+            }
+        }
+
+        private void appendResponseTranscript(String delta) {
+            if (StringUtils.isBlank(delta)) {
+                return;
+            }
+            synchronized (responseTranscriptBuilder) {
+                responseTranscriptBuilder.append(delta);
+            }
+        }
+
+        private void finishResponseTranscript(String transcript) {
+            if (StringUtils.isNotBlank(transcript)) {
+                synchronized (responseTranscriptBuilder) {
+                    responseTranscriptBuilder.setLength(0);
+                    responseTranscriptBuilder.append(transcript.trim());
+                }
+            }
+            notifyResponseTranscriptIfPossible();
+        }
+
+        private void notifyResponseTranscriptIfPossible() {
+            String transcript = currentResponseTranscript();
+            if (StringUtils.isBlank(transcript) || !responseTranscriptNotified.compareAndSet(false, true)) {
+                return;
+            }
+            Consumer<String> consumer = responseTranscriptDoneConsumer;
+            if (consumer != null) {
+                consumer.accept(transcript);
+            }
+        }
+
+        private void completeResponse() {
+            notifyResponseTranscriptIfPossible();
+            responseFuture.complete(snapshotResponse());
+        }
+
+        private void completeResponseExceptionally(Throwable t) {
+            responseFuture.completeExceptionally(t);
+        }
+
+        private RealtimeTurnResponse snapshotResponse() {
+            return new RealtimeTurnResponse(inputTranscript, currentResponseTranscript(), hasResponseAudio.get());
+        }
+
+        private String currentResponseTranscript() {
+            synchronized (responseTranscriptBuilder) {
+                return responseTranscriptBuilder.toString().trim();
+            }
+        }
+
+        private void clearAssistantResponseHandlers() {
+            responseAudioConsumer = null;
+            responseTranscriptDoneConsumer = null;
         }
 
         private void close() {
@@ -235,11 +417,15 @@ public class RealtimeSpeechManager {
                 webSocket.close(1000, "client closed");
             }
             transcriptFuture.complete("");
+            responseFuture.complete(snapshotResponse());
         }
 
         @Override
         public String toString() {
             return "RealtimeSpeechSession{studentId=" + studentId + '}';
         }
+    }
+
+    public record RealtimeTurnResponse(String inputTranscript, String responseTranscript, boolean hasAudio) {
     }
 }

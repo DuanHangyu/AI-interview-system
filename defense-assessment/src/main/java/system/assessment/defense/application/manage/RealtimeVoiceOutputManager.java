@@ -17,6 +17,7 @@ import java.util.Base64;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 @Component
@@ -44,7 +45,7 @@ public class RealtimeVoiceOutputManager {
     @Value("${dashscope.realtime.url:wss://dashscope.aliyuncs.com/api-ws/v1/realtime}")
     private String realtimeUrl;
 
-    @Value("${dashscope.realtime.model:qwen3.5-omni-plus-realtime}")
+    @Value("${dashscope.realtime.model:qwen3.5-omni-flash-realtime}")
     private String realtimeModel;
 
     @Value("${dashscope.realtime.voice:Ethan}")
@@ -60,6 +61,8 @@ public class RealtimeVoiceOutputManager {
 
         CompletableFuture<Boolean> done = new CompletableFuture<>();
         AtomicBoolean hasAudio = new AtomicBoolean(false);
+        AtomicBoolean responseRequested = new AtomicBoolean(false);
+        AtomicReference<WebSocket> upstream = new AtomicReference<>();
         Request request = new Request.Builder()
                 .url(realtimeUrl + "?model=" + realtimeModel)
                 .addHeader("Authorization", "Bearer " + apiKey)
@@ -68,13 +71,13 @@ public class RealtimeVoiceOutputManager {
         okHttpClient.newWebSocket(request, new WebSocketListener() {
             @Override
             public void onOpen(@NotNull WebSocket webSocket, @NotNull Response response) {
+                upstream.set(webSocket);
                 webSocket.send(eventFactory.audioOutputSessionUpdate(realtimeVoice, QUESTION_VOICE_INSTRUCTIONS));
-                webSocket.send(eventFactory.responseCreateForAudio(buildReadQuestionPrompt(questionText)));
             }
 
             @Override
             public void onMessage(@NotNull WebSocket webSocket, @NotNull String text) {
-                handleServerEvent(webSocket, text, audioChunkConsumer, hasAudio, done);
+                handleServerEvent(webSocket, text, questionText, audioChunkConsumer, hasAudio, responseRequested, done);
             }
 
             @Override
@@ -94,19 +97,26 @@ public class RealtimeVoiceOutputManager {
         } catch (Exception e) {
             log.warn("Realtime voice output timeout or unavailable, model:{}, waitMs:{}, error:{}",
                     realtimeModel, voiceOutputWaitMs, e.getMessage());
+            WebSocket webSocket = upstream.get();
+            if (webSocket != null) {
+                webSocket.close(1000, "voice timeout");
+            }
             return hasAudio.get();
         }
     }
 
     private void handleServerEvent(WebSocket webSocket,
                                    String text,
+                                   String questionText,
                                    Consumer<byte[]> audioChunkConsumer,
                                    AtomicBoolean hasAudio,
+                                   AtomicBoolean responseRequested,
                                    CompletableFuture<Boolean> done) {
         try {
             JsonNode root = objectMapper.readTree(text);
             String type = root.path("type").asText("");
             switch (type) {
+                case "session.updated" -> requestAudioResponse(webSocket, questionText, responseRequested);
                 case "response.audio.delta" -> {
                     String delta = root.path("delta").asText("");
                     if (StringUtils.isNotBlank(delta)) {
@@ -129,6 +139,23 @@ public class RealtimeVoiceOutputManager {
         } catch (Exception e) {
             log.warn("Realtime voice output event parse failed:{}", e.getMessage());
         }
+    }
+
+    private void requestAudioResponse(WebSocket webSocket, String questionText, AtomicBoolean responseRequested) {
+        if (!responseRequested.compareAndSet(false, true)) {
+            return;
+        }
+        webSocket.send(eventFactory.inputAudioClear());
+        webSocket.send(eventFactory.inputAudioAppend(silentPcm16kMono(300)));
+        webSocket.send(eventFactory.inputAudioCommit());
+        webSocket.send(eventFactory.responseCreateForAudio(buildReadQuestionPrompt(questionText)));
+    }
+
+    private byte[] silentPcm16kMono(int millis) {
+        int sampleRate = 16000;
+        int bytesPerSample = 2;
+        int length = Math.max(1, sampleRate * bytesPerSample * millis / 1000);
+        return new byte[length];
     }
 
     private String buildReadQuestionPrompt(String questionText) {
