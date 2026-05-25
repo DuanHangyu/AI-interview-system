@@ -21,6 +21,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -96,6 +97,32 @@ class AssessmentMaterialServiceTest {
         assertThat(context).contains("design.pdf", "缓存后的材料摘要");
         assertThat(setting.getAssessmentFiles()).contains(AssessmentMaterialService.STATUS_READY, "缓存后的材料摘要");
         verify(settingService).update(any());
+    }
+
+    @Test
+    void returnsParsedContextWhenCacheUpdateFails() {
+        FileDTO file = new FileDTO();
+        file.setFileName("large-design.pdf");
+        file.setFileUrl("oss/large-design.pdf");
+
+        AssessmentSettingPO setting = AssessmentSettingPO.builder()
+                .id(7)
+                .assessmentFiles(JSONUtil.toJsonStr(List.of(file)))
+                .build();
+
+        when(httpUtils.downloadFile("oss/large-design.pdf"))
+                .thenReturn(new FileByteDTO("fake pdf".getBytes(StandardCharsets.UTF_8)));
+        when(openAiManager.getTextModel()).thenReturn("qwen3.6-plus");
+        when(openAiManager.chatCompletionWithFiles(eq("qwen3.6-plus"), anyString(), anyString(), any()))
+                .thenReturn("项目背景：".repeat(1000));
+        when(settingService.update(any())).thenThrow(new RuntimeException("Data too long for column 'assessment_files'"));
+
+        assertThatCode(() -> {
+            String context = materialService.getOrParseMaterialContext(setting);
+
+            assertThat(context).contains("large-design.pdf", "项目背景");
+            assertThat(setting.getAssessmentFiles().length()).isLessThanOrEqualTo(3500);
+        }).doesNotThrowAnyException();
     }
 
     @Test
