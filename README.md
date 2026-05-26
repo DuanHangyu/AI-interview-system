@@ -41,6 +41,7 @@ DB_PASSWORD='<数据库密码，放在 .env.local，不要提交>'
 
 DB_TUNNEL_ENABLED='true'
 DB_TUNNEL_WATCH='true'
+DB_TUNNEL_CHECK_INTERVAL='5'
 DB_TUNNEL_LOCAL_HOST='127.0.0.1'
 DB_TUNNEL_LOCAL_PORT='13307'
 DB_TUNNEL_REMOTE_HOST='127.0.0.1'
@@ -50,7 +51,7 @@ DB_TUNNEL_SSH_USER='root'
 DB_TUNNEL_SSH_PASSWORD='<ECS SSH 密码，放在 .env.local，不要提交>'
 ```
 
-`scripts/start-backend.sh` 会先调用 `scripts/start-db-tunnel.sh`。`start-db-tunnel.sh` 会自己读取 `.env.local`，所以可以直接运行。如果 `13307` 已经可用，它会直接复用；如果没有监听，会按 `.env.local` 自动拉起隧道，并启动一个本地 watcher 在隧道掉线后自动重连。
+`scripts/start-backend.sh` 会先调用 `scripts/start-db-tunnel.sh`。`start-db-tunnel.sh` 会自己读取 `.env.local`，所以可以直接运行。如果 `13307` 已经可用，它会直接复用；如果没有监听，会按 `.env.local` 自动拉起隧道，并启动一个本地 watcher 在隧道掉线后自动重连。`DB_TUNNEL_CHECK_INTERVAL` 控制 watcher 检查间隔，本地建议保持 5 秒左右，避免隧道短暂掉线时前端请求直接撞上数据库连接错误。
 
 后端启动前会检查 `DB_JDBC_URL` 指向的 host/port 是否可达。数据库不可达时会直接启动失败，避免前端进入页面后才看到 `request.ts:86` 的 500 报错。
 
@@ -84,6 +85,7 @@ curl -sS -X POST http://localhost:3004/dev-api/login \
 - `DB_PASSWORD` 为空或错误：MySQL 会报 `Access denied for user 'defense_test'@'localhost'`。
 - `DB_TUNNEL_SSH_PASSWORD` 为空或错误：隧道无法建立。
 - `DB_TUNNEL_WATCH` 被关掉：隧道掉线后不会自动重连，本地建议保持 `true`。
+- `DB_TUNNEL_CHECK_INTERVAL` 太长：隧道掉线后存在较长空窗期，前端请求可能短暂报数据库连接失败，本地建议设为 `5`。
 - 后端在旧脚本或错误配置下启动过：运行 `./scripts/restart-local.sh`，让后端重新经过数据库预检。
 
 快速修复流程：

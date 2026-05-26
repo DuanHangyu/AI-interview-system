@@ -6,6 +6,23 @@ import errorCode from "@/utils/errorCode";
 import { useAuthStore } from "@/stores/auth";
 // 是否显示重新登录
 export let isRelogin = { show: false };
+const DATABASE_CONNECTION_ERROR =
+  "数据库连接失败，请检查本地数据库隧道或 DB_JDBC_URL 配置";
+const DB_RETRY_DELAY = 1500;
+const DB_RETRY_LIMIT = 2;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDatabaseRequest(config: any) {
+  const retryCount = config.__dbRetryCount || 0;
+  if (retryCount >= DB_RETRY_LIMIT) {
+    return null;
+  }
+  config.__dbRetryCount = retryCount + 1;
+  return sleep(DB_RETRY_DELAY).then(() => service(config));
+}
 
 // 创建axios实例
 const service = axios.create({
@@ -78,6 +95,16 @@ service.interceptors.response.use(
         });
       }
       return Promise.reject("无效的会话，或者会话已过期，请重新登录。");
+    } else if (code === 500 && msg === DATABASE_CONNECTION_ERROR) {
+      const retryResponse = retryDatabaseRequest(res.config);
+      if (retryResponse) {
+        return retryResponse;
+      }
+      message.error({
+        duration: 3,
+        content: msg,
+      });
+      return Promise.reject(new Error(msg));
     } else if (code === 500 || code == 400) {
       message.error({
         duration: 3,
