@@ -15,7 +15,7 @@
         >
           <div
             class="h-full w-full flex flex-col items-center justify-center pb-[250px]"
-            v-if="!uploadFile?.presignedUrl"
+            v-if="!filePreviewUrl"
           >
             <img
               src="@/assets/defense/empty.png"
@@ -44,7 +44,7 @@
             v-else
           >
             <iframe
-              :src="uploadFile?.presignedUrl"
+              :src="filePreviewUrl"
               class="size-full"
               frameborder="0"
             ></iframe>
@@ -58,7 +58,7 @@
             @change="handleChange"
             class="mt-3 flex-shrink-0"
             :beforeUpload="beforeUpload"
-            v-if="uploadFile?.presignedUrl"
+            v-if="filePreviewUrl"
           >
             <div
               class="reUpload hover:scale-105 hover:bg-[rgba(255,255,255,0.3)] absolute bottom-[190px] right-[40px] flex items-center justify-center"
@@ -175,7 +175,7 @@
 <script setup lang="ts">
 import DefenseHeader from "@/components/Layout/componets/DefenseHeader.vue";
 import WaveComponent from "@/components/Wave/index.vue";
-import { ref, onMounted, onUnmounted, createVNode, watch } from "vue";
+import { computed, ref, onMounted, onUnmounted, createVNode, watch } from "vue";
 import { useSpeechRecognition } from "@/composables/useSpeechRecognition.js";
 import { useRoute, useRouter } from "vue-router";
 import { getAssessmentDetail } from "@/api/assessment";
@@ -224,6 +224,7 @@ const countdown = ref(0);
 let countdownTimer: any = null;
 let videoStream: any = null;
 const uploadFile = ref<Recordable>({});
+const filePreviewUrl = computed(() => buildFilePreviewUrl(uploadFile.value));
 const isWarmupDone = ref(false);
 const detail = ref<Recordable>({});
 const submitLoading = ref(false);
@@ -241,6 +242,18 @@ const {
   audioReady,
   audioError,
 } = useSpeechRecognition();
+
+function buildFilePreviewUrl(file?: Recordable) {
+  if (!file?.fileUrl) {
+    return file?.presignedUrl || "";
+  }
+  const params = new URLSearchParams({ fileUrl: file.fileUrl });
+  const token = getToken();
+  if (token) {
+    params.set("Authorization", `Bearer ${token}`);
+  }
+  return `${process.env.VUE_APP_BASE_API}/file/preview?${params.toString()}`;
+}
 
 function setBlockingError(messageText: string, step: "setup" | "defense" = "setup") {
   blockingError.value = messageText;
@@ -548,9 +561,12 @@ const handleBeforeUnload = () => {
 window.addEventListener("beforeunload", handleBeforeUnload);
 
 const beforeUpload = (file: FileType) => {
-  if (file?.type != "application/pdf") {
+  const isPdf =
+    file?.type === "application/pdf" ||
+    file?.name?.toLowerCase().endsWith(".pdf");
+  if (!isPdf) {
     message.error("只允许上传 PDF 文件");
-    return;
+    return false;
   }
   uploadProgress.value = 0;
   return true;
@@ -577,6 +593,8 @@ const handleChange = (info: UploadChangeParam) => {
           fileUrl: info.file?.response?.data?.url,
           fileName: info.file?.response?.data?.fileName,
         },
+      }).catch(() => {
+        uploadStatus.value = "exception";
       });
     } else {
       uploadStatus.value = "exception";

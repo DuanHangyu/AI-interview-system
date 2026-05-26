@@ -1435,11 +1435,23 @@ public class StudentAssessmentService {
     @Transactional(rollbackFor = Exception.class)
     public Boolean uploadDefenseFile(StudentDefenseFileUploadCmd uploadCmd, Integer studentId) {
         Integer assessmentId = uploadCmd.getAssessmentId();
+        String defenseFile = JSONUtil.toJsonStr(uploadCmd.getFile());
         Optional<StudentAssessmentRecordPO> recordOp = recordService.findByStudentIdAndAssessmentId(studentId, assessmentId);
+        if (recordOp.isPresent()) {
+            return recordService.update(Wrappers.lambdaUpdate(StudentAssessmentRecordPO.class)
+                    .set(StudentAssessmentRecordPO::getDefenseFile, defenseFile)
+                    .eq(StudentAssessmentRecordPO::getStudentId, studentId)
+                    .eq(StudentAssessmentRecordPO::getAssessmentId, assessmentId));
+        }
         StudentAssessmentRecordPO record = recordOp.orElseGet(() -> StudentAssessmentRecordPO.builder()
                 .assessmentId(assessmentId)
                 .studentId(studentId)
-                .defenseFile(JSONUtil.toJsonStr(uploadCmd.getFile()))
+                .defenseFile(defenseFile)
+                .defenseVoice("")
+                .score(-1)
+                .checkScore(0)
+                .state(0)
+                .reAnalysis(false)
                 .build());
         return recordService.saveOrUpdate(record);
     }

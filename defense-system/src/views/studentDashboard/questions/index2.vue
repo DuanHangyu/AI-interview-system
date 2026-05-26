@@ -15,6 +15,7 @@
         >
           <InterviewVoicePlayer
             ref="voicePlayerRef"
+            :playback-enabled="voicePlaybackEnabled"
             @ready="onVoicePlayerReady"
             @playing="updatePlaying"
             @broadcastingEnd="broadcastingEnd"
@@ -188,6 +189,7 @@ const questionList = ref<Recordable[]>([]);
 const isReady = ref(false);
 const isVoiceReady = ref(false);
 const isGenQuestion = ref(false);
+const voicePlaybackEnabled = ref(false);
 const audioStatus = ref(false);
 const blockingError = ref("");
 const blockedStep = ref<"setup" | "generate" | "answer">("setup");
@@ -228,6 +230,7 @@ function clearGenerateRetryTimer() {
 function setBlockingError(messageText: string, step: "setup" | "generate" | "answer" = "generate") {
   clearVoiceFallbackTimer();
   clearGenerateRetryTimer();
+  voicePlaybackEnabled.value = false;
   isGenQuestion.value = false;
   blockingError.value = messageText;
   blockedStep.value = step;
@@ -330,7 +333,7 @@ async function retryBlockedStep() {
     return;
   }
 
-  isGenQuestion.value = true;
+  markQuestionPending();
   if (questionList.value.length === 0) {
     startAssessment();
   } else {
@@ -343,6 +346,14 @@ function clearVoiceFallbackTimer() {
     clearTimeout(voiceFallbackTimer);
     voiceFallbackTimer = undefined;
   }
+}
+
+function markQuestionPending(text?: string) {
+  voicePlaybackEnabled.value = false;
+  if (text) {
+    loadingText.value = text;
+  }
+  isGenQuestion.value = true;
 }
 
 function scheduleVoiceFallbackStart() {
@@ -374,6 +385,7 @@ const updatePlaying = (e: boolean) => {
 
 const broadcastingEnd = async () => {
   clearVoiceFallbackTimer();
+  voicePlaybackEnabled.value = false;
   if (audioStatus.value) {
     stopAudio();
     audioStatus.value = false;
@@ -446,12 +458,10 @@ const connect = () => {
         setBlockingError(contentText, "generate");
         message.error(contentText);
       } else if (contentText.includes("题目正在生成中")) {
-        loadingText.value = contentText;
-        isGenQuestion.value = true;
+        markQuestionPending(contentText);
         scheduleGenerateRetry();
       } else if (contentText.includes("正在生成")) {
-        loadingText.value = contentText;
-        isGenQuestion.value = true;
+        markQuestionPending(contentText);
       } else if (contentText.includes("题目生成完成")) {
         clearGenerateRetryTimer();
         generateQuestions();
@@ -463,7 +473,6 @@ const connect = () => {
           } else {
             clearBlockingError();
             clearGenerateRetryTimer();
-            isGenQuestion.value = false;
             // if (audioStatus.value) {
             //   stopAudio();
             //   audioStatus.value = false;
@@ -484,7 +493,11 @@ const connect = () => {
             } else {
               questionList.value?.push(content);
             }
-            scheduleVoiceFallbackStart();
+            nextTick(() => {
+              isGenQuestion.value = false;
+              voicePlaybackEnabled.value = true;
+              scheduleVoiceFallbackStart();
+            });
             // startAnswerQuestions();
           }
         }
@@ -603,9 +616,10 @@ function endQuestionEarly() {
   try {
     (voicePlayerRef.value as any)?.stopVoice?.();
   } catch (error) {}
+  voicePlaybackEnabled.value = false;
   clearInterval(answerTimer);
   answerTime.value = detail.value?.answerTime || 60;
-  isGenQuestion.value = true;
+  markQuestionPending();
   if (!sendAssessmentAction("end-answer")) {
     isGenQuestion.value = false;
   }
@@ -627,7 +641,7 @@ function generateQuestions() {
   // ) {
   //   return;
   // }
-  isGenQuestion.value = true;
+  markQuestionPending();
   if (audioStatus.value) {
     stopAudio();
     audioStatus.value = false;
@@ -699,7 +713,7 @@ watch(
   async ([ready, voiceReady, status]: any) => {
     if (ready && voiceReady && status && !isFirst.value) {
       isFirst.value = true;
-      isGenQuestion.value = true;
+      markQuestionPending();
       if (!startAssessment()) {
         isFirst.value = false;
       }
@@ -726,13 +740,7 @@ watch(
     ) {
       if (isFirstShow.value) {
         isFirstShow.value = false;
-        showArr.value = [1];
-        setTimeout(() => {
-          showArr.value?.push(2);
-        }, 400);
-        setTimeout(() => {
-          showArr.value?.push(3);
-        }, 800);
+        showArr.value = [1, 2, 3];
       }
     }
   },

@@ -3,10 +3,16 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, ref, defineEmits } from "vue";
+import { onMounted, onUnmounted, ref, defineEmits, watch } from "vue";
 import { getToken } from "@/utils/auth";
 import PCMPlayer from "pcm-player";
 
+const props = defineProps({
+  playbackEnabled: {
+    type: Boolean,
+    default: true,
+  },
+});
 const emit = defineEmits(["ready", "playing", "broadcastingEnd"]);
 const AUDIO_SAMPLE_RATE = 24000;
 
@@ -24,7 +30,14 @@ let ignorePayloadTimer = null;
 let manuallyClosed = false;
 let reconnectTimer = null;
 let reconnectAttempts = 0;
+let pendingAudioPayloads = [];
+let pendingAudioEnd = false;
 const maxReconnectAttempts = 5;
+
+function clearPendingAudio() {
+  pendingAudioPayloads = [];
+  pendingAudioEnd = false;
+}
 
 function resetPlaybackState() {
   audioLength.value = 0;
@@ -57,6 +70,7 @@ function ignorePayloadsUntilEndOrTimeout() {
 }
 
 function broadcastingEnd() {
+  clearPendingAudio();
   emit("broadcastingEnd");
   emit("playing", false);
   resetPlaybackState();
@@ -141,6 +155,7 @@ function handleAudioPayload(payload) {
 function handleAudioEnd() {
   if (ignorePayloadUntilEnd) {
     clearIgnorePayload();
+    clearPendingAudio();
     resetPlaybackState();
     return;
   }
@@ -148,6 +163,39 @@ function handleAudioEnd() {
   isWsEnd.value = true;
   if (audioLength.value === 0) {
     broadcastingEnd();
+  }
+}
+
+function handleIncomingAudioPayload(payload) {
+  if (!props.playbackEnabled) {
+    pendingAudioPayloads.push(payload);
+    return;
+  }
+
+  handleAudioPayload(payload);
+}
+
+function handleIncomingAudioEnd() {
+  if (!props.playbackEnabled) {
+    pendingAudioEnd = true;
+    return;
+  }
+
+  handleAudioEnd();
+}
+
+function flushPendingAudio() {
+  if (!props.playbackEnabled) {
+    return;
+  }
+
+  const payloads = pendingAudioPayloads.splice(0);
+  for (const payload of payloads) {
+    handleAudioPayload(payload);
+  }
+  if (pendingAudioEnd) {
+    pendingAudioEnd = false;
+    handleAudioEnd();
   }
 }
 
@@ -195,6 +243,7 @@ function closeSocket() {
 }
 
 const stopVoice = () => {
+  clearPendingAudio();
   if (audioLength.value > 0) {
     ignorePayloadsUntilEndOrTimeout();
   }
@@ -232,7 +281,7 @@ function connectVoiceSocket() {
       event?.data?.includes("audio:end") &&
       event?.data?.includes("normalMessage")
     ) {
-      handleAudioEnd();
+      handleIncomingAudioEnd();
       return;
     }
 
@@ -241,7 +290,7 @@ function connectVoiceSocket() {
     }
 
     if (event?.data && !/^\s*$/.test(event.data)) {
-      handleAudioPayload(event.data);
+      handleIncomingAudioPayload(event.data);
     }
   });
 
@@ -270,9 +319,19 @@ onMounted(() => {
   connectVoiceSocket();
 });
 
+watch(
+  () => props.playbackEnabled,
+  (enabled) => {
+    if (enabled) {
+      flushPendingAudio();
+    }
+  }
+);
+
 onUnmounted(() => {
   manuallyClosed = true;
   clearIgnorePayload();
+  clearPendingAudio();
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
