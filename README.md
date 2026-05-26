@@ -40,6 +40,7 @@ DB_USERNAME='defense_test'
 DB_PASSWORD='<数据库密码，放在 .env.local，不要提交>'
 
 DB_TUNNEL_ENABLED='true'
+DB_TUNNEL_WATCH='true'
 DB_TUNNEL_LOCAL_HOST='127.0.0.1'
 DB_TUNNEL_LOCAL_PORT='13307'
 DB_TUNNEL_REMOTE_HOST='127.0.0.1'
@@ -49,7 +50,9 @@ DB_TUNNEL_SSH_USER='root'
 DB_TUNNEL_SSH_PASSWORD='<ECS SSH 密码，放在 .env.local，不要提交>'
 ```
 
-`scripts/start-backend.sh` 会先调用 `scripts/start-db-tunnel.sh`。如果 `13307` 已经被 SSH 隧道监听，它会直接复用；如果没有监听，会按 `.env.local` 自动拉起隧道。
+`scripts/start-backend.sh` 会先调用 `scripts/start-db-tunnel.sh`。`start-db-tunnel.sh` 会自己读取 `.env.local`，所以可以直接运行。如果 `13307` 已经可用，它会直接复用；如果没有监听，会按 `.env.local` 自动拉起隧道，并启动一个本地 watcher 在隧道掉线后自动重连。
+
+后端启动前会检查 `DB_JDBC_URL` 指向的 host/port 是否可达。数据库不可达时会直接启动失败，避免前端进入页面后才看到 `request.ts:86` 的 500 报错。
 
 ### Database Health Check
 
@@ -80,7 +83,8 @@ curl -sS -X POST http://localhost:3004/dev-api/login \
 - `DB_JDBC_URL` 还在指向公网 `8.136.219.184:3306`：本地开发应指向 `127.0.0.1:13307`。
 - `DB_PASSWORD` 为空或错误：MySQL 会报 `Access denied for user 'defense_test'@'localhost'`。
 - `DB_TUNNEL_SSH_PASSWORD` 为空或错误：隧道无法建立。
-- 后端在隧道修好前已经启动过：重启后端，让 Hikari 重新初始化连接池。
+- `DB_TUNNEL_WATCH` 被关掉：隧道掉线后不会自动重连，本地建议保持 `true`。
+- 后端在旧脚本或错误配置下启动过：运行 `./scripts/restart-local.sh`，让后端重新经过数据库预检。
 
 快速修复流程：
 
@@ -96,6 +100,7 @@ curl -sS -X POST http://localhost:3004/dev-api/login \
 
 ```bash
 tail -f .run/backend.log
+tail -f .run/db-tunnel.log
 ```
 
 日志判断：

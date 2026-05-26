@@ -24,5 +24,30 @@ fi
 
 "$ROOT_DIR/scripts/start-db-tunnel.sh"
 
+if [[ -z "${DB_JDBC_URL:-}" ]]; then
+  echo "DB_JDBC_URL is empty. Set it in $ENV_FILE."
+  exit 1
+fi
+
+DB_HOST_PORT="${DB_JDBC_URL#jdbc:mysql://}"
+DB_HOST_PORT="${DB_HOST_PORT%%/*}"
+DB_HOST="${DB_HOST_PORT%:*}"
+DB_PORT="${DB_HOST_PORT##*:}"
+if [[ "$DB_HOST" == "$DB_PORT" ]]; then
+  DB_PORT="3306"
+fi
+
+for attempt in {1..20}; do
+  if nc -z -w 2 "$DB_HOST" "$DB_PORT" >/dev/null 2>&1; then
+    break
+  fi
+  if [[ "$attempt" == "20" ]]; then
+    echo "Database is not reachable at $DB_HOST:$DB_PORT."
+    echo "Check DB_JDBC_URL and the SSH tunnel settings in $ENV_FILE."
+    exit 1
+  fi
+  sleep 0.5
+done
+
 cd "$ROOT_DIR/defense-assessment"
 exec ./mvnw spring-boot:run -Dspring-boot.run.profiles="${SPRING_PROFILE:-local}"

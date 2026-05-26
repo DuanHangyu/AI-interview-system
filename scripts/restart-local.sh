@@ -39,9 +39,11 @@ kill_port "$FRONTEND_PORT"
 
 nohup "$ROOT_DIR/scripts/start-backend.sh" > "$RUN_DIR/backend.log" 2>&1 &
 BACKEND_PID="$!"
+echo "$BACKEND_PID" > "$RUN_DIR/backend.pid"
 
 nohup "$ROOT_DIR/scripts/start-frontend.sh" > "$RUN_DIR/frontend.log" 2>&1 &
 FRONTEND_PID="$!"
+echo "$FRONTEND_PID" > "$RUN_DIR/frontend.pid"
 
 echo "Backend starting on http://localhost:$BACKEND_PORT (pid $BACKEND_PID, log .run/backend.log)"
 echo "Frontend starting on http://localhost:$FRONTEND_PORT (pid $FRONTEND_PID, log .run/frontend.log)"
