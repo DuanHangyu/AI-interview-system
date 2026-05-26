@@ -2,7 +2,7 @@ import { onUnmounted, ref } from "vue";
 import { getToken } from "@/utils/auth";
 import { mittEmit } from "@/utils/appMitt";
 
-export function useSpeechRecognition() {
+export function useSpeechRecognition(options = {}) {
   const transcriptionText = ref("");
   const audioReady = ref(false);
   const audioError = ref("");
@@ -19,6 +19,7 @@ export function useSpeechRecognition() {
   let manuallyClosed = false;
   let reconnectTimer = null;
   let initPromise = null;
+  const handlers = options || {};
 
   function mergeChunks(chunks) {
     let totalLength = 0;
@@ -280,7 +281,23 @@ export function useSpeechRecognition() {
         console.log("是否清理关闭:", event.wasClean);
         console.log("原因:", event.reason);
         stopHeartbeat();
-        const shouldResumeStreaming = isStreaming;
+        let shouldResumeStreaming = isStreaming;
+        if (
+          !manuallyClosed &&
+          shouldResumeStreaming &&
+          typeof handlers.onConnectionLost === "function"
+        ) {
+          try {
+            shouldResumeStreaming =
+              handlers.onConnectionLost({
+                code: event.code,
+                reason: event.reason,
+                wasClean: event.wasClean,
+              }) !== false;
+          } catch (e) {
+            console.error("录音连接中断处理失败", e);
+          }
+        }
         stopAudio({ flush: false });
         if (ws.value === socket) {
           ws.value = null;

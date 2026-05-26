@@ -241,7 +241,9 @@ const {
   volumeLevel,
   audioReady,
   audioError,
-} = useSpeechRecognition();
+} = useSpeechRecognition({
+  onConnectionLost: handleDefenseAudioConnectionLost,
+});
 
 function buildFilePreviewUrl(file?: Recordable) {
   if (!file?.fileUrl) {
@@ -264,6 +266,22 @@ function setBlockingError(messageText: string, step: "setup" | "defense" = "setu
 function clearBlockingError() {
   blockingError.value = "";
   loadingText.value = "正在加载中，请稍后...";
+}
+
+function handleDefenseAudioConnectionLost() {
+  if (pageOff.value || !isDebating.value) {
+    return false;
+  }
+  clearInterval(countdownTimer);
+  isDebating.value = false;
+  submitLoading.value = false;
+  endingDefense = false;
+  setBlockingError(
+    "录音连接中断，本轮答辩未保存。请检查网络和麦克风后点击重试，重新开始答辩。",
+    "defense"
+  );
+  message.error("录音连接中断，请重新开始答辩");
+  return false;
 }
 
 function clearTextHeartbeat() {
@@ -310,7 +328,7 @@ async function retryBlockedStep() {
   }
   isWarmupDone.value = true;
   if (step === "defense") {
-    await startDebate();
+    startDebateBefore();
   }
 }
 

@@ -799,7 +799,7 @@ public class StudentAssessmentService {
             // 先更新为分析中
             recordService.update(Wrappers.lambdaUpdate(StudentAssessmentRecordPO.class)
                     .set(StudentAssessmentRecordPO::getState, 2)
-                    .set(StudentAssessmentRecordPO::getReAnalysis, false)
+                    .set(StudentAssessmentRecordPO::getReAnalysis, true)
                     .eq(StudentAssessmentRecordPO::getStudentId, studentId)
                     .eq(StudentAssessmentRecordPO::getAssessmentId, assessmentId));
 
@@ -1538,12 +1538,18 @@ public class StudentAssessmentService {
                     .value(value)
                     .defense(defense)
                     .showResult(setting.getShowResult())
+                    .state(record.getState())
+                    .reAnalysis(record.getReAnalysis())
                     .location(location)
                     .build();
         }
         return StudentAssessmentDetailDTO.builder()
                 .id(record.getId())
                 .studentName(student.getName())
+                .showResult(setting.getShowResult())
+                .state(record.getState())
+                .reAnalysis(record.getReAnalysis())
+                .location(location)
                 .build();
     }
 

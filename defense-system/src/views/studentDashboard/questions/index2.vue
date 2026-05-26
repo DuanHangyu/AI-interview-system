@@ -171,7 +171,9 @@ const {
   volumeLevel,
   audioReady,
   audioError,
-} = useSpeechRecognition();
+} = useSpeechRecognition({
+  onConnectionLost: handleAnswerAudioConnectionLost,
+});
 const questionContainer = ref();
 
 const showArr = ref<number[]>([]);
@@ -239,6 +241,23 @@ function setBlockingError(messageText: string, step: "setup" | "generate" | "ans
 function clearBlockingError() {
   blockingError.value = "";
   resetLoadingText();
+}
+
+function handleAnswerAudioConnectionLost() {
+  if (pageOff.value || !audioStatus.value) {
+    return false;
+  }
+  clearInterval(answerTimer);
+  answerTimer = undefined;
+  audioStatus.value = false;
+  isGenQuestion.value = false;
+  answerTime.value = detail.value?.answerTime || answerTime.value;
+  setBlockingError(
+    "录音连接中断，本轮回答未保存。请检查网络和麦克风后点击重试，重新回答当前题目。",
+    "answer"
+  );
+  message.error("录音连接中断，请重新回答当前题目");
+  return false;
 }
 
 function clearTextHeartbeat() {

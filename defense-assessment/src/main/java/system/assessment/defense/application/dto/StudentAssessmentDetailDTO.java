@@ -52,6 +52,12 @@ public class StudentAssessmentDetailDTO {
     @Schema(description = "是否显示结果")
     private Boolean showResult;
 
+    @Schema(description = "考核记录状态 0考核中 1完成 2分析中")
+    private Integer state;
+
+    @Schema(description = "是否正在重新分析")
+    private Boolean reAnalysis;
+
     @Schema(description = "地点")
     private String location;
 }
