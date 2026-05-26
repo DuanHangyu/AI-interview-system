@@ -29,8 +29,11 @@
         />
       </div>
     </section>
-    <div class="space-y-4" v-if="info?.followQuestionAnswers?.length">
-      <template v-for="item in info?.followQuestionAnswers">
+    <div class="space-y-4" v-if="followQuestionAnswers.length">
+      <template
+        v-for="item in followQuestionAnswers"
+        :key="item.followQuestion || item.followAnswerFile"
+      >
         <section
           class="p-4 bg-[rgba(255,255,255,0.8)] rounded-xl"
           v-if="item?.followQuestion"
@@ -51,7 +54,7 @@
         </section>
         <section
           class="p-4 bg-[rgba(255,255,255,0.8)] rounded-xl"
-          v-if="item?.followQuestion"
+          v-if="item?.followQuestion || item?.followAnswer || item?.followAnswerFile"
         >
           <div class="flex items-center space-x-[10px]">
             <img
@@ -83,13 +86,33 @@
   </div>
 </template>
 <script lang="ts" setup>
-import { onUnmounted, ref } from "vue";
+import { computed, onUnmounted, ref } from "vue";
 import AudioPlayer from "./AudioPlayer.vue";
 const props = defineProps({
   info: {
     type: Object,
     default: () => ({}),
   },
+});
+
+const followQuestionAnswers = computed(() => {
+  if (Array.isArray(props.info?.followQuestionAnswers)) {
+    return props.info.followQuestionAnswers;
+  }
+  if (
+    props.info?.followQuestion ||
+    props.info?.followAnswer ||
+    props.info?.followAnswerFile
+  ) {
+    return [
+      {
+        followQuestion: props.info?.followQuestion,
+        followAnswer: props.info?.followAnswer,
+        followAnswerFile: props.info?.followAnswerFile,
+      },
+    ];
+  }
+  return [];
 });
 
 const audioPlayer = ref();
