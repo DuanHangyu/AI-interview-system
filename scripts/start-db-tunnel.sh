@@ -31,6 +31,7 @@ REMOTE_HOST="${DB_TUNNEL_REMOTE_HOST:-127.0.0.1}"
 REMOTE_PORT="${DB_TUNNEL_REMOTE_PORT:-3306}"
 SSH_HOST="${DB_TUNNEL_SSH_HOST:-}"
 SSH_USER="${DB_TUNNEL_SSH_USER:-root}"
+SSH_KEY="${DB_TUNNEL_SSH_KEY:-}"
 CHECK_INTERVAL="${DB_TUNNEL_CHECK_INTERVAL:-5}"
 
 is_local_port_open() {
@@ -58,13 +59,29 @@ start_tunnel_once() {
     exit 1
   fi
 
-  if [[ -n "${DB_TUNNEL_SSH_PASSWORD:-}" ]]; then
+  if [[ -n "$SSH_KEY" ]]; then
+    ssh \
+      -fN \
+      -i "$SSH_KEY" \
+      -o IdentitiesOnly=yes \
+      -o PreferredAuthentications=publickey \
+      -o PasswordAuthentication=no \
+      -o StrictHostKeyChecking=accept-new \
+      -o ServerAliveInterval=30 \
+      -o ServerAliveCountMax=3 \
+      -o ExitOnForwardFailure=yes \
+      -L "$LOCAL_HOST:$LOCAL_PORT:$REMOTE_HOST:$REMOTE_PORT" \
+      "$SSH_USER@$SSH_HOST"
+  elif [[ -n "${DB_TUNNEL_SSH_PASSWORD:-}" ]]; then
     if ! command -v sshpass >/dev/null 2>&1; then
       echo "sshpass is required when DB_TUNNEL_SSH_PASSWORD is set"
       exit 1
     fi
     SSHPASS="$DB_TUNNEL_SSH_PASSWORD" sshpass -e ssh \
       -fN \
+      -o PreferredAuthentications=password \
+      -o PubkeyAuthentication=no \
+      -o NumberOfPasswordPrompts=1 \
       -o StrictHostKeyChecking=accept-new \
       -o ServerAliveInterval=30 \
       -o ServerAliveCountMax=3 \
