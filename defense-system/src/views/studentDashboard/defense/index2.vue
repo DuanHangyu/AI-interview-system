@@ -1,17 +1,17 @@
 <template>
   <main
-    class="size-full px-4 xl:px-9 pt-6 pb-8 defense flex flex-col overflow-auto relative min-w-[1024px]"
+    class="size-full px-4 xl:px-9 pt-6 pb-8 defense flex flex-col overflow-auto relative"
   >
-    <div class="min-w-[1024px] xl:min-w-[1450px] w-full flex-shrink-0">
+    <div class="defense-header-bar w-full flex-shrink-0">
       <DefenseHeader class="w-full" />
     </div>
     <div class="flex-grow w-full flex items-center justify-center">
       <div
-        class="flex mt-4 max-h-[800px] max-w-[1450px] h-full w-full relative"
+        class="defense-stage flex mt-4 max-h-[800px] max-w-[1450px] h-full w-full relative"
       >
         <section
           v-if="showArr?.[0] == 1"
-          class="w-[800px] h-full bg-[rgba(0,0,0,0.15)] rounded-[32px] mr-4 p-4 relative fade-in flex-shrink-0"
+          class="defense-file-panel w-[800px] h-full bg-[rgba(0,0,0,0.15)] rounded-[32px] mr-4 p-4 relative fade-in flex-shrink-0"
         >
           <div
             class="h-full w-full flex flex-col items-center justify-center pb-[250px]"
@@ -69,7 +69,7 @@
         </section>
         <section
           v-show="showArr?.[1] == 2"
-          class="flex-grow max-h-[600px] bg-[rgba(123,123,123,0.5)] rounded-[32px] flex flex-col p-4 fade-in videoBox"
+          class="defense-video-panel flex-grow max-h-[600px] bg-[rgba(123,123,123,0.5)] rounded-[32px] flex flex-col p-4 fade-in videoBox"
         >
           <div class="flex-grow w-full rounded-[32px] overflow-hidden relative">
             <video
@@ -110,7 +110,7 @@
               </div>
             </div>
             <div
-              class="w-[140px] h-[50px] bg-[rgba(255,255,255,0.15)] hover:bg-[rgba(255,255,255,0.3)] hover:scale-105 cursor-pointer flex items-center justify-center text-lg font-medium text-white flex-shrink-0 rounded-[693px]"
+              class="defense-main-action w-[140px] h-[50px] bg-[rgba(255,255,255,0.15)] hover:bg-[rgba(255,255,255,0.3)] hover:scale-105 cursor-pointer flex items-center justify-center text-lg font-medium text-white flex-shrink-0 rounded-[693px]"
               @click="
                 () => {
                   if (submitLoading) return;
@@ -137,7 +137,7 @@
         </section>
         <section
           v-if="showArr?.[2] == 3"
-          class="absolute bottom-[-10px] left-0 w-full bottom-card fade-in"
+          class="defense-bottom-panel absolute bottom-[-10px] left-0 w-full bottom-card fade-in"
         >
           <div
             class="bottom-card-in py-6 px-2 text-[#FFFFFF] font-semibold text-2xl"
@@ -812,5 +812,96 @@ video {
 }
 .videoBox {
   height: calc(100% - 270px);
+}
+
+.defense-header-bar {
+  max-width: 1450px;
+  margin: 0 auto;
+}
+
+@media (max-width: 1100px) {
+  .defense {
+    height: auto;
+    min-height: 100dvh;
+    padding: 18px 16px 24px;
+  }
+
+  .defense-stage {
+    height: auto;
+    max-height: none;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .defense-file-panel,
+  .defense-video-panel {
+    width: 100% !important;
+    min-height: 420px;
+    max-height: none;
+    margin-right: 0 !important;
+  }
+
+  .defense-video-panel {
+    height: auto;
+  }
+
+  .defense-bottom-panel {
+    position: relative !important;
+    bottom: auto !important;
+    left: auto !important;
+    min-height: 220px;
+    margin-top: 0;
+  }
+
+  .bottom-card {
+    height: auto;
+    min-height: 220px;
+  }
+}
+
+@media (max-width: 640px) {
+  .defense {
+    padding: 12px;
+  }
+
+  .defense-file-panel,
+  .defense-video-panel {
+    min-height: 340px;
+    border-radius: 24px;
+  }
+
+  .defense-file-panel {
+    padding: 12px;
+  }
+
+  .defense-action {
+    height: auto;
+    min-height: 112px;
+    flex-direction: column;
+    gap: 14px;
+    padding: 14px;
+    border-radius: 28px;
+  }
+
+  .defense-main-action,
+  .reUpload {
+    width: 100% !important;
+    max-width: 260px;
+  }
+
+  .reUpload {
+    right: 24px;
+    bottom: 24px;
+  }
+
+  .bottom-card {
+    padding: 14px;
+    border-radius: 28px;
+  }
+
+  .bottom-card-in {
+    border-radius: 22px;
+    font-size: 18px;
+  }
 }
 </style>

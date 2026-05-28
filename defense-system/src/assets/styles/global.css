@@ -276,6 +276,7 @@ body,
 .management-view .ant-spin-container,
 .management-view .ant-table,
 .management-view .ant-table-container {
+  min-width: 0;
   height: 100%;
 }
 
@@ -478,9 +479,48 @@ body,
 }
 
 @media (max-width: 760px) {
+  .ant-modal {
+    max-width: calc(100vw - 24px);
+    top: 12px;
+  }
+
+  .ant-modal .ant-modal-content {
+    border-radius: 18px;
+  }
+
+  .management-view {
+    height: auto;
+    min-height: 0;
+  }
+
+  .management-filter,
+  .management-card,
+  .setting-card {
+    border-radius: 16px;
+  }
+
+  .management-filter {
+    padding: 14px;
+  }
+
+  .management-card {
+    min-height: auto;
+    padding: 14px;
+    overflow: visible;
+  }
+
   .management-toolbar {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .management-toolbar-right {
+    width: 100%;
+  }
+
+  .management-toolbar-right .ant-btn {
+    flex: 1 1 132px;
+    min-width: 0;
   }
 
   .management-filter .ant-form {
@@ -525,6 +565,32 @@ body,
     width: 100%;
   }
 
+  .management-filter .ant-form-item-control-input-content {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .management-filter .ant-form-item-control-input-content > .ant-btn,
+  .management-filter .ant-form-item-control-input-content > button {
+    flex: 1 1 120px;
+    width: auto !important;
+    margin: 0 !important;
+  }
+
+  .management-table {
+    min-height: 430px;
+    overflow: hidden;
+  }
+
+  .management-view .ant-table-wrapper,
+  .management-view .ant-spin-nested-loading,
+  .management-view .ant-spin-container,
+  .management-view .ant-table,
+  .management-view .ant-table-container {
+    height: 100%;
+  }
+
   .setting-card-header {
     flex-direction: column;
   }
@@ -535,6 +601,35 @@ body,
 
   .setting-grid {
     grid-template-columns: 1fr;
+  }
+
+  .setting-card {
+    padding: 14px;
+  }
+
+  .setting-pagination {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-top: 10px;
+  }
+}
+
+@media (max-width: 520px) {
+  .management-toolbar-title {
+    font-size: 16px;
+  }
+
+  .management-toolbar-desc {
+    line-height: 1.5;
+  }
+
+  .action-cell {
+    gap: 6px;
+  }
+
+  .action-cell .ant-btn {
+    min-width: 64px;
+    padding-inline: 10px;
   }
 }
 

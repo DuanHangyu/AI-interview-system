@@ -290,21 +290,26 @@ const changeTab = (e: number) => {
 
 @media (max-width: 900px) {
   .dashboard-shell {
+    height: auto;
+    min-height: 100%;
     flex-direction: column;
-    overflow: auto;
+    overflow: visible;
   }
 
   .dashboard-sidebar {
     width: 100%;
     min-width: 0;
+    border-radius: 22px;
   }
 
   .dashboard-nav {
     flex-direction: row;
     overflow-x: auto;
+    padding-bottom: 2px;
   }
 
   .dashboard-nav-item {
+    flex: 0 0 auto;
     min-width: 138px;
   }
 
@@ -313,8 +318,39 @@ const changeTab = (e: number) => {
   }
 
   .dashboard-main {
-    min-height: 720px;
+    min-height: 0;
     padding: 18px;
+    overflow: visible;
+  }
+
+  .dashboard-main-body {
+    overflow: visible;
+  }
+}
+
+@media (max-width: 560px) {
+  .dashboard-sidebar {
+    padding: 14px 12px;
+    border-radius: 18px;
+  }
+
+  .dashboard-main {
+    padding: 14px;
+    border-radius: 20px;
+  }
+
+  .dashboard-main-header {
+    align-items: flex-start;
+    flex-direction: column;
+    margin-bottom: 14px;
+  }
+
+  .dashboard-main-header h1 {
+    font-size: 24px;
+  }
+
+  .dashboard-main-meta {
+    height: 30px;
   }
 }
 </style>

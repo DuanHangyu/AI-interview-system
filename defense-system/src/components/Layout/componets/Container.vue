@@ -50,7 +50,30 @@ defineOptions({
 
 @media (max-width: 900px) {
   .console-layout {
+    min-height: 100dvh;
+    height: auto;
     padding: 16px;
+    overflow: auto;
+  }
+
+  .console-frame {
+    min-height: calc(100dvh - 32px);
+    height: auto;
+  }
+
+  .console-content {
+    overflow: visible;
+  }
+}
+
+@media (max-width: 560px) {
+  .console-layout {
+    padding: 10px;
+  }
+
+  .console-frame {
+    min-height: calc(100dvh - 20px);
+    gap: 10px;
   }
 }
 </style>

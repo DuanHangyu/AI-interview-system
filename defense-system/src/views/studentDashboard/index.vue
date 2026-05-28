@@ -2583,6 +2583,22 @@ const cancelSubscribe = (e: Recordable) => {
     grid-template-columns: 1fr;
   }
 
+  .modal-list article,
+  .device-check-list article {
+    grid-template-columns: 1fr;
+  }
+
+  .notice-toolbar,
+  .notice-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .notice-actions button,
+  .notice-toolbar button {
+    width: 100%;
+  }
+
   .progress-panel {
     padding: 22px;
   }
