@@ -1,7 +1,6 @@
 <template>
   <main class="console-layout">
     <div class="console-frame">
-      <Header class="console-header-wrap" />
       <section class="console-content">
       <router-view v-slot="{ Component, route }">
         <keep-alive :include="['AdminDashboard', 'TeacherDashboard']">
@@ -13,7 +12,6 @@
   </main>
 </template>
 <script setup lang="ts">
-import { Header } from "@/components/Layout";
 defineOptions({
   name: "Layout",
 });
@@ -36,10 +34,6 @@ defineOptions({
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.console-header-wrap {
-  flex-shrink: 0;
 }
 
 .console-content {

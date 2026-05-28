@@ -41,7 +41,6 @@ html,
 body {
   margin: 0;
   padding: 0;
-  height: 100%;
-  overflow: hidden; /* 避免页面整体滚动 */
+  min-height: 100%;
 }
 </style>

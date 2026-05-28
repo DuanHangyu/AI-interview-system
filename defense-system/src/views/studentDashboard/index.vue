@@ -1264,9 +1264,9 @@ const cancelSubscribe = (e: Recordable) => {
 
 <style scoped>
 .student-page {
-  min-height: 100vh;
+  min-height: 100dvh;
   padding: 28px;
-  overflow-y: auto;
+  overflow: visible;
   background:
     radial-gradient(circle at 78% 16%, rgba(255, 226, 112, 0.2), transparent 24%),
     radial-gradient(circle at 18% 10%, rgba(255, 255, 255, 0.22), transparent 28%),
@@ -1276,7 +1276,7 @@ const cancelSubscribe = (e: Recordable) => {
 
 .student-shell {
   width: min(1720px, 100%);
-  min-height: calc(100vh - 56px);
+  min-height: calc(100dvh - 56px);
   margin: 0 auto;
   padding: 18px;
   border: 1px solid rgba(255, 255, 255, 0.72);
