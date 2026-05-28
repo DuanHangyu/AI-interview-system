@@ -18,8 +18,8 @@ const init = () => {
     series: [
       {
         z: 1,
-        center: ["50%", "80%"],
-        radius: "100%",
+        center: ["50%", "78%"],
+        radius: "86%",
         type: "gauge",
         startAngle: 180,
         endAngle: 0,
@@ -40,7 +40,7 @@ const init = () => {
         },
         progress: {
           show: true,
-          width: 32,
+          width: 28,
         },
         pointer: {
           show: false,
@@ -80,7 +80,7 @@ const init = () => {
           },
           rich: {
             value: {
-              fontSize: 56,
+              fontSize: 50,
               fontWeight: 600,
               color: "rgba(30, 27, 57, 1)",
             },
@@ -100,8 +100,8 @@ const init = () => {
       },
       {
         z: 2,
-        center: ["50%", "80%"],
-        radius: "100%",
+        center: ["50%", "78%"],
+        radius: "86%",
         type: "gauge",
         startAngle: 180,
         endAngle: 0,
@@ -122,7 +122,7 @@ const init = () => {
         },
         progress: {
           show: false,
-          width: 32,
+          width: 28,
         },
         pointer: {
           // icon: "roundRect",

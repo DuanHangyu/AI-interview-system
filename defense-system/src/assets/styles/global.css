@@ -71,7 +71,12 @@ body,
 }
 
 .console-layout,
-.login-page {
+.login-page,
+.student-dashboard,
+.studentDetail,
+.student-live-page,
+.result-over-page,
+.result-page {
   color: var(--color-text-primary);
   font-family:
     Inter,
@@ -83,7 +88,12 @@ body,
 }
 
 .console-layout .ant-btn,
-.login-page .ant-btn {
+.login-page .ant-btn,
+.student-dashboard .ant-btn,
+.studentDetail .ant-btn,
+.student-live-page .ant-btn,
+.result-over-page .ant-btn,
+.result-page .ant-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -98,24 +108,44 @@ body,
 }
 
 .console-layout .ant-btn:not(:disabled):hover,
-.login-page .ant-btn:not(:disabled):hover {
+.login-page .ant-btn:not(:disabled):hover,
+.student-dashboard .ant-btn:not(:disabled):hover,
+.studentDetail .ant-btn:not(:disabled):hover,
+.student-live-page .ant-btn:not(:disabled):hover,
+.result-over-page .ant-btn:not(:disabled):hover,
+.result-page .ant-btn:not(:disabled):hover {
   transform: translateY(-1px);
 }
 
 .console-layout .ant-btn-primary,
-.login-page .ant-btn-primary {
+.login-page .ant-btn-primary,
+.student-dashboard .ant-btn-primary,
+.studentDetail .ant-btn-primary,
+.student-live-page .ant-btn-primary,
+.result-over-page .ant-btn-primary,
+.result-page .ant-btn-primary {
   border-color: var(--color-accent);
   background: var(--color-accent);
   box-shadow: 0 10px 22px var(--color-accent-glow);
 }
 
 .console-layout .ant-btn-primary:not(:disabled):hover,
-.login-page .ant-btn-primary:not(:disabled):hover {
+.login-page .ant-btn-primary:not(:disabled):hover,
+.student-dashboard .ant-btn-primary:not(:disabled):hover,
+.studentDetail .ant-btn-primary:not(:disabled):hover,
+.student-live-page .ant-btn-primary:not(:disabled):hover,
+.result-over-page .ant-btn-primary:not(:disabled):hover,
+.result-page .ant-btn-primary:not(:disabled):hover {
   border-color: var(--color-accent-hover);
   background: var(--color-accent-hover);
 }
 
-.console-layout .ant-btn-background-ghost.ant-btn-primary {
+.console-layout .ant-btn-background-ghost.ant-btn-primary,
+.student-dashboard .ant-btn-background-ghost.ant-btn-primary,
+.studentDetail .ant-btn-background-ghost.ant-btn-primary,
+.student-live-page .ant-btn-background-ghost.ant-btn-primary,
+.result-over-page .ant-btn-background-ghost.ant-btn-primary,
+.result-page .ant-btn-background-ghost.ant-btn-primary {
   color: var(--color-accent);
   border-color: rgba(231, 95, 73, 0.36);
   background: rgba(255, 255, 255, 0.66);
@@ -123,7 +153,12 @@ body,
 }
 
 .console-layout .ant-btn-default,
-.login-page .ant-btn-default {
+.login-page .ant-btn-default,
+.student-dashboard .ant-btn-default,
+.studentDetail .ant-btn-default,
+.student-live-page .ant-btn-default,
+.result-over-page .ant-btn-default,
+.result-page .ant-btn-default {
   border-color: var(--color-border-subtle);
   color: var(--color-text-primary);
   background: rgba(255, 255, 255, 0.72);

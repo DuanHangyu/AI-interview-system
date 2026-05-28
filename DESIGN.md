@@ -4,7 +4,199 @@
 
 This file captures the visual style extracted from the provided B-side dashboard reference image. Use it as the design direction when migrating the style into the AI Interview System.
 
-The target feel is a calm, premium, minimal B-end product interface: grayscale spatial background, soft glass panels, compact dark navigation, crisp typography, and a small warm coral accent for action and status.
+The target feel is a calm, premium, minimal B-end product interface: grayscale spatial background, soft glass panels, compact navigation, crisp typography, and a small warm accent for action and status.
+
+## Student Dashboard Addendum
+
+The latest student reference image defines the student-facing home/dashboard after login. It shifts the student workspace toward a warmer, friendlier B-end dashboard: soft cream panels, pale yellow glow, rounded modular widgets, black text, and charcoal cards only where focus is needed. Use this addendum primarily for the student landing dashboard, task list, appointments, results entry, and report entry points. Live interview pages should only inherit the palette and light status accents unless a separate redesign is requested.
+
+### Student Dashboard Keywords
+
+- Warm minimal B-end
+- Cream glass dashboard
+- Soft yellow task lighting
+- Rounded modular widgets
+- Human-centered student workspace
+- Light task board with one dark progress card
+- Friendly but still operational
+- Calm assessment preparation
+
+### Student Dashboard Mood
+
+The student should feel they are entering a guided assessment workspace, not a generic portal. The UI should feel calm, prepared, and organized. The student dashboard should communicate:
+
+- which assessments are waiting
+- what the student should do next
+- whether the task can be started now
+- how appointment, analysis, and result states progress
+
+Use the warm design for the student dashboard shell while preserving B-end clarity. Avoid gamified, colorful, or decorative student-card visuals. For live interview and question pages, keep the existing operational layout and only borrow the warm gray/yellow/coral palette.
+
+### Student Dashboard Palette
+
+```css
+:root {
+  --student-page-bg: #aaa9a6;
+  --student-panel: rgba(248, 248, 240, 0.9);
+  --student-panel-soft: rgba(255, 255, 247, 0.74);
+  --student-cream: #f7f3df;
+  --student-cream-deep: #efe8bd;
+  --student-yellow: #f4cf55;
+  --student-yellow-soft: rgba(244, 207, 85, 0.28);
+  --student-charcoal: #2f302f;
+  --student-charcoal-soft: #444540;
+  --student-text: #17181a;
+  --student-muted: #6c6e68;
+  --student-border: rgba(255, 255, 255, 0.72);
+  --student-line: rgba(23, 24, 26, 0.08);
+  --student-success: #86a95f;
+  --student-danger: #e75f49;
+}
+```
+
+Color usage:
+
+- Use warm gray for the page background, not pure white.
+- Main student board uses translucent cream/off-white.
+- Use pale yellow for progress, active time, and ready status.
+- Use coral only for destructive, urgent, or final primary actions.
+- Use one dark charcoal card for task progress or status grouping.
+- Keep blue/purple out of the student dashboard unless an existing asset forces it.
+
+### Student Dashboard Layout
+
+The student dashboard should be a single rounded workspace board, inspired by the reference image:
+
+- Top: existing student header, then compact pill tabs for assessment state.
+- Main board: cream glass slab with 28-36px radius.
+- Hero row: welcome copy, progress strip, and compact metrics.
+- Left column: student profile / current module summary.
+- Center: assessment task cards with appointment/start/result actions.
+- Right: dark task progress card showing the state flow.
+
+Recommended desktop structure:
+
+```css
+.student-dashboard {
+  min-height: 100vh;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 82% 22%, rgba(244, 207, 85, 0.34), transparent 30%),
+    linear-gradient(180deg, #b6b5b1 0%, #8c8b87 100%);
+}
+
+.student-home-board {
+  max-width: 1450px;
+  margin: 0 auto;
+  padding: 22px;
+  border-radius: 34px;
+  background: var(--student-panel);
+  border: 1px solid var(--student-border);
+  box-shadow: 0 28px 90px rgba(30, 31, 29, 0.22);
+}
+
+.student-dashboard-grid {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr) 280px;
+  gap: 14px;
+}
+```
+
+Responsive rules:
+
+- At tablet width, stack profile, task list, and progress card vertically.
+- At mobile width, one column, cards stay full-width, and no fixed `min-width` should force horizontal scroll.
+- Text must wrap inside cards. Long task titles should not resize the card layout.
+
+### Student Dashboard Components
+
+#### Header
+
+Use the existing student header style, aligned with this palette:
+
+- brand pill on the left
+- status pill in the center
+- compact user pill on the right
+- off-white background with subtle border
+- no heavy black full-width navbar on the dashboard
+
+#### Welcome Card
+
+Use for the main greeting and preparation context:
+
+- large direct greeting with student name
+- short sentence explaining the current workspace
+- progress strip with active status, completion percentage, and page indicator
+- cream/off-white surface, not a standalone hero banner
+
+#### Profile Card
+
+Use for student identity and current module metadata:
+
+- warm yellow-tinted avatar area
+- charcoal avatar mark or photo
+- compact metadata rows for module, page size, and service status
+- avoid decorative student illustrations unless product-supplied
+
+#### Task Card
+
+Use for assessment items in the central list:
+
+- two-column grid on desktop, one-column on narrow screens
+- large faint sequence number
+- status pill in pale yellow
+- structured rows for time, location, score, and question settings
+- actions stay at the bottom so card height remains stable
+
+#### Progress Card
+
+Use one dark card on the right, similar to the reference onboarding card:
+
+- charcoal background
+- title: "Assessment Task" or equivalent
+- large numeric progress, e.g. `2/8`
+- checklist rows for pending, scheduled, analyzing, and finished states
+- current/complete states shown with yellow or white indicators
+- inactive states muted
+
+### Student Dashboard Typography
+
+- Main student page title: 30-42px, 700-850 weight
+- Dashboard card title: 18-25px, 700-850 weight
+- Task title: 17-20px, 700-850 weight
+- Metric value: 28-34px, 800-850 weight
+- Checklist labels: 13-14px, 700-850 weight
+- Metadata: 11-12px, 500-600 weight
+
+Use the existing stack:
+
+```css
+font-family:
+  Inter,
+  "SF Pro Display",
+  "PingFang SC",
+  "Microsoft YaHei",
+  Arial,
+  sans-serif;
+```
+
+### Student Dashboard Do / Do Not
+
+Do:
+
+- Make the post-login student workspace feel warm, structured, and ready.
+- Use one dark card to anchor progress/status.
+- Keep the primary action obvious and reachable.
+- Show assessment state and next action in dashboard widgets.
+- Keep task metadata scannable and stable.
+
+Do not:
+
+- Use the all-dark room style for the normal student dashboard.
+- Scatter many saturated colors across widgets.
+- Hide appointment/start/result actions inside low-contrast text.
+- Use decorative stars/orbits inside the product UI itself; the reference image decoration is poster-level, not app-level.
+- Let long task names, action buttons, and metadata overlap.
 
 ## Design Keywords
 

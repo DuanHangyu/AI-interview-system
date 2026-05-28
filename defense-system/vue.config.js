@@ -2,11 +2,32 @@
 const { defineConfig } = require("@vue/cli-service");
 const CompressionPlugin = require("compression-webpack-plugin");
 
+function getCliPort() {
+  const portArg = process.argv.find((arg) => arg.startsWith("--port="));
+  if (portArg) {
+    return portArg.split("=")[1];
+  }
+  const portIndex = process.argv.findIndex(
+    (arg) => arg === "--port" || arg === "-p"
+  );
+  return portIndex >= 0 ? process.argv[portIndex + 1] : undefined;
+}
+
+const devServerPort = process.env.PORT || getCliPort() || 3002;
+const devServerHost = process.env.WDS_SOCKET_HOST || "localhost";
+const devServerSocketPort = process.env.WDS_SOCKET_PORT || devServerPort;
+
 module.exports = defineConfig({
   devServer: {
-    port: 3002,
+    port: devServerPort,
     client: {
       overlay: false, // 禁用错误遮罩层
+      webSocketURL: {
+        protocol: "ws",
+        hostname: devServerHost,
+        port: devServerSocketPort,
+        pathname: "/ws",
+      },
     },
     proxy: {
       "/dev-api": {

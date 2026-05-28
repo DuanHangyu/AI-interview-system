@@ -163,7 +163,7 @@
           {{ blockingError }}
         </div>
         <button
-          class="mt-6 h-11 px-8 rounded-full bg-[#524fff] text-white text-base font-medium hover:bg-[#3f3cef]"
+          class="mt-6 h-11 px-8 rounded-full bg-[#e75f49] text-white text-base font-medium hover:bg-[#f07157]"
           @click="retryBlockedStep"
         >
           重试
@@ -436,6 +436,10 @@ const connect = () => {
   }
   if (reconnectAttempts.value >= maxReconnectAttempts && !isConnected.value) {
     connectionStatus.value = `Failed after ${maxReconnectAttempts} attempts`;
+    setBlockingError(
+      "答辩连接已断开，请检查网络后点击重试继续。",
+      isDebating.value ? "defense" : "setup"
+    );
     return;
   }
   connectionStatus.value = "Connecting...";
@@ -528,7 +532,14 @@ const connect = () => {
 };
 // 尝试重新连接
 const attemptReconnect = () => {
-  if (isConnected.value || reconnectAttempts.value >= maxReconnectAttempts) {
+  if (isConnected.value || reconnectTimer) {
+    return;
+  }
+  if (reconnectAttempts.value >= maxReconnectAttempts) {
+    setBlockingError(
+      "答辩连接已断开，请检查网络后点击重试继续。",
+      isDebating.value ? "defense" : "setup"
+    );
     return;
   }
   reconnectAttempts.value += 1;
@@ -643,7 +654,9 @@ watch(
 </script>
 <style scoped>
 .defense {
-  background: #5f5a57;
+  background:
+    radial-gradient(circle at 82% 18%, rgba(244, 207, 85, 0.18), transparent 30%),
+    linear-gradient(180deg, #706f6b 0%, #5f5a57 100%);
 }
 .bottom-card {
   height: 265px;

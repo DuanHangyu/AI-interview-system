@@ -48,8 +48,11 @@ const commandFn: MenuProps["onClick"] = ({ key }) => {
 <style scoped>
 .header {
   height: 53px;
-  background: rgba(255, 255, 255, 0.12);
-  box-shadow: 0px 8px 16px 0px rgba(32, 33, 41, 0.02);
+  background: rgba(248, 248, 240, 0.16);
+  box-shadow:
+    0px 12px 28px 0px rgba(32, 33, 41, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 12px;
 }
 </style>
