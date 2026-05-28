@@ -117,7 +117,7 @@
               <div class="task-icon">
                 <CalendarOutlined v-if="tab === 1" />
                 <PlayCircleOutlined v-else-if="tab === 2" />
-                <InboxOutlined v-else-if="tab === 3" />
+                <InboxOutlined v-else-if="isAnalysisTask(featuredTask)" />
                 <FileSearchOutlined v-else />
               </div>
               <div class="task-copy">
@@ -214,10 +214,11 @@
               </header>
               <h3>报告与复盘</h3>
               <div class="mini-list">
-                <div v-for="item in listPreview" :key="item?.id">
+                <div v-for="item in reportPreview" :key="item?.id">
                   <span>{{ item?.theme || "未命名考核" }}</span>
                   <small>{{ statusText(item) }}</small>
                 </div>
+                <p class="mini-empty" v-if="!reportPreview.length">暂无报告</p>
               </div>
             </article>
 
@@ -497,14 +498,8 @@ const tabItems = [
     icon: markRaw(ClockCircleOutlined),
   },
   {
-    label: "评估中",
-    desc: "等待分析生成",
-    key: 3,
-    icon: markRaw(InboxOutlined),
-  },
-  {
     label: "已结束",
-    desc: "查看结果复盘",
+    desc: "查看评估状态与复盘报告",
     key: 4,
     icon: markRaw(CheckCircleOutlined),
   },
@@ -526,13 +521,6 @@ const deviceItems = [
   { label: "扬声器", icon: markRaw(GlobalOutlined) },
   { label: "网络", icon: markRaw(WifiOutlined) },
 ];
-
-const fallbackCounts: Record<number, number> = {
-  1: 8,
-  2: 4,
-  3: 2,
-  4: 12,
-};
 
 const tab = ref(1);
 const sidebarActive = ref("home");
@@ -589,6 +577,44 @@ const total = ref(0);
 const page = ref(1);
 const serverTime = ref(dayjs());
 
+const getResponseRecords = (res: Recordable) => res?.data?.records || [];
+const getResponseTotal = (res: Recordable) => Number(res?.data?.total || 0);
+const withDashboardStatus = (
+  records: Recordable[],
+  status: "analysis" | "done"
+) => records.map((item) => ({ ...item, _dashboardStatus: status }));
+
+const fetchDashboardList = async (
+  currentTab: number,
+  params: Record<string, any>
+) => {
+  if (currentTab === 4) {
+    const [analysisRes, doneRes] = await Promise.all([
+      getAssessmentAnalysis(params),
+      getAssessmentDone(params),
+    ]);
+    const analysisRecords = withDashboardStatus(
+      getResponseRecords(analysisRes),
+      "analysis"
+    );
+    const doneRecords = withDashboardStatus(getResponseRecords(doneRes), "done");
+    return {
+      records: [...analysisRecords, ...doneRecords].slice(0, params.size),
+      total: getResponseTotal(analysisRes) + getResponseTotal(doneRes),
+    };
+  }
+
+  const requestMap: Record<number, (params: Record<string, any>) => Promise<any>> = {
+    1: getAppointmentList,
+    2: getAssessmentTodo,
+  };
+  const res = await requestMap[currentTab](params);
+  return {
+    records: getResponseRecords(res),
+    total: getResponseTotal(res),
+  };
+};
+
 const onList = (options: { force?: boolean; silent?: boolean } = {}) => {
   const currentTab = tab.value;
   const currentRequest = requestId.value + 1;
@@ -600,18 +626,10 @@ const onList = (options: { force?: boolean; silent?: boolean } = {}) => {
     page: page.value,
     size: 6,
   };
-  const requestMap: Record<number, (params: Record<string, any>) => Promise<any>> = {
-    1: getAppointmentList,
-    2: getAssessmentTodo,
-    3: getAssessmentAnalysis,
-    4: getAssessmentDone,
-  };
 
-  requestMap[currentTab](params)
-    .then((res) => {
+  fetchDashboardList(currentTab, params)
+    .then(({ records, total: nextTotal }) => {
       if (requestId.value !== currentRequest) return;
-      const records = res?.data?.records || [];
-      const nextTotal = res?.data?.total || 0;
       list.value = records;
       total.value = nextTotal;
       if (page.value === 1) {
@@ -662,18 +680,19 @@ const studentStage = computed(
   () => authStore?.info?.grade || authStore?.info?.className || "本科 · 大三"
 );
 const featuredTask = computed(() => list.value?.[0] || null);
-const scheduleTask = computed(() => list.value?.[1] || featuredTask.value);
-const listPreview = computed(() => list.value.slice(0, 3));
-const completedVisibleCount = computed(() => Math.min(page.value * 6, total.value || 0));
+const scheduleTask = computed(() =>
+  tab.value === 4 ? null : list.value?.[1] || featuredTask.value
+);
+const reportPreview = computed(() => (tab.value === 4 ? list.value.slice(0, 3) : []));
 const progressTotalCount = computed(() => {
   if (statisticLoaded.value) return Number(statistic.value?.all || 0);
-  return total.value || fallbackCounts[4];
+  return tab.value === 4 ? total.value : 0;
 });
 const progressDoneCount = computed(() => {
   const doneCount = statisticLoaded.value
     ? Number(statistic.value?.done || 0)
-    : Math.round((progressTotalCount.value || fallbackCounts[4]) * 0.68);
-  return Math.min(progressTotalCount.value || fallbackCounts[4], doneCount);
+    : list.value.filter((item) => item?._dashboardStatus === "done").length;
+  return Math.min(progressTotalCount.value, doneCount);
 });
 const progressPercent = computed(() => {
   if (!progressTotalCount.value) return 0;
@@ -684,43 +703,66 @@ const progressPercent = computed(() => {
 });
 const featuredDeadline = computed(() => {
   if (!featuredTask.value?.timePeriod) return "等待通知";
-  return `截止预约 ${dayjs(featuredTask.value.timePeriod).format("YYYY-MM-DD HH:mm")}`;
+  const time = dayjs(featuredTask.value.timePeriod).format("YYYY-MM-DD HH:mm");
+  if (tab.value === 1) return `预约时间 ${time}`;
+  if (tab.value === 2) return `考核时间 ${time}`;
+  if (isAnalysisTask(featuredTask.value)) return `提交时间 ${time}`;
+  return `完成时间 ${time}`;
 });
 const nextSectionTitle = computed(() => {
-  if (tab.value === 1) return "下一场面试";
+  if (tab.value === 1) return "待预约考核";
   if (tab.value === 2) return "待完成考核";
-  if (tab.value === 3) return "分析中的考核";
-  return "最近复盘报告";
+  return "评估与复盘";
 });
-const todoItems = computed(() => [
-  {
-    title: featuredTask.value?.theme ? `预约 ${featuredTask.value.theme}` : "预约 AI 面试",
-    desc: "尽快完成预约",
-    time: "23:59:59",
-    icon: markRaw(CalendarOutlined),
-  },
-  {
+const todoItems = computed(() => {
+  const items = [];
+  const appointmentCount = tabCount(1);
+  const todoCount = tabCount(2);
+  if (appointmentCount > 0) {
+    items.push({
+      title: tab.value === 1 && featuredTask.value?.theme
+        ? `预约 ${featuredTask.value.theme}`
+        : "预约待处理考核",
+      desc: `${appointmentCount} 场考核等待预约`,
+      time: "待处理",
+      icon: markRaw(CalendarOutlined),
+    });
+  }
+  if (todoCount > 0) {
+    items.push({
+      title: "进入待完成面试",
+      desc: `${todoCount} 场面试需要按时进入`,
+      time: "待开始",
+      icon: markRaw(PlayCircleOutlined),
+    });
+  }
+  items.push({
     title: "完成设备检测",
-    desc: "确保考试顺利",
-    time: "23:59:59",
+    desc: "进入面试前建议确认设备状态",
+    time: "建议",
     icon: markRaw(VideoCameraOutlined),
-  },
-  {
-    title: "查看面试须知",
-    desc: "了解考核注意事项",
-    time: "2 天后截止",
-    icon: markRaw(FileTextOutlined),
-  },
-]);
+  });
+  if (items.length === 1) {
+    items.unshift({
+      title: "暂无待办考核",
+      desc: "当前没有需要处理的面试任务",
+      time: "已同步",
+      icon: markRaw(CheckCircleOutlined),
+    });
+  }
+  return items;
+});
 
 const tabCount = (key: number) => {
   const countMap: Record<number, number> = {
     1: Number(statistic.value?.toAppoint || 0),
     2: Number(statistic.value?.todo || 0),
-    3: Number(statistic.value?.analysis || 0),
-    4: Number(statistic.value?.done || 0),
+    4:
+      Number(statistic.value?.analysis || 0) +
+      Number(statistic.value?.done || 0),
   };
-  return countMap[key] || (tab.value === key ? total.value : 0) || fallbackCounts[key];
+  if (statisticLoaded.value) return countMap[key] || 0;
+  return tab.value === key ? total.value : 0;
 };
 
 const noticeItems = computed(() => [
@@ -764,7 +806,7 @@ const helpItems = [
   },
   {
     title: "报告在哪里看？",
-    desc: "考核结束并完成分析后，可在“我的报告”或“已结束”列表中查看复盘报告。",
+    desc: "考核结束后会进入“已结束”，分析完成前显示正在评估，完成后可查看复盘报告。",
   },
 ];
 
@@ -919,6 +961,10 @@ const toAppoint = (e: Record<string, any>) => {
 };
 
 const toDetail = (e: Record<string, any>) => {
+  if (isAnalysisTask(e)) {
+    message.info("系统正在生成评估报告，请稍后查看");
+    return;
+  }
   if (e?.state == 2) {
     router.push(`/studyDetail?id=${e?.id}`);
   }
@@ -965,10 +1011,14 @@ const isReappointLocked = (item: Recordable) => {
   return item.state == 3 || item.state == 5;
 };
 
+const isAnalysisTask = (item?: Recordable | null) => {
+  return item?._dashboardStatus === "analysis";
+};
+
 const statusText = (item: Recordable) => {
+  if (isAnalysisTask(item)) return "正在评估";
   if (tab.value == 1) return "待预约";
   if (tab.value == 2) return canStart(item) ? "可开始" : "已预约";
-  if (tab.value == 3) return "评估中";
   if (item?.state == 2) return "已完成";
   if (isReappointLocked(item)) return "暂不可约";
   if (canReappoint(item)) return "可重约";
@@ -979,14 +1029,14 @@ const primaryActionText = (item: Recordable) => {
   if (!item) return "暂无任务";
   if (tab.value === 1) return "立即预约";
   if (tab.value === 2) return canStart(item) ? "开始考核" : "未到时间";
-  if (tab.value === 3) return "查看进度";
+  if (isAnalysisTask(item)) return "正在评估";
   if (item?.state === 2) return "查看报告";
   if (canReappoint(item)) return "重新预约";
   return "查看详情";
 };
 
 const primaryDisabled = (item: Recordable) => {
-  return tab.value === 2 && item && !canStart(item);
+  return (tab.value === 2 && item && !canStart(item)) || isAnalysisTask(item);
 };
 
 const handlePrimaryAction = (item: Recordable) => {
@@ -999,10 +1049,7 @@ const handlePrimaryAction = (item: Recordable) => {
     startFn(item);
     return;
   }
-  if (tab.value === 3) {
-    message.info("分析生成中，请稍后查看");
-    return;
-  }
+  if (isAnalysisTask(item)) return;
   if (item?.state === 2) {
     toDetail(item);
     return;
@@ -1040,6 +1087,13 @@ const modeLabel = (item?: Recordable | null) => {
 };
 
 const scheduleDate = (item?: Recordable | null) => {
+  if (!item?.timePeriod) {
+    return {
+      day: "--/--",
+      week: "暂无",
+      time: "--:--",
+    };
+  }
   const value = item?.timePeriod ? dayjs(item.timePeriod) : dayjs();
   return {
     day: value.format("MM/DD"),
