@@ -1,10 +1,10 @@
 <template>
-  <div class="size-full flex flex-col gap-y-4">
-    <section class="bg-white rounded-lg p-4 flex-shrink-0">
+  <div class="management-view">
+    <section class="management-filter">
       <Form
         layout="inline"
         ref="formRef"
-        class="flex gap-2"
+        class="flex gap-3"
         :model="params"
         :label-col="{ style: { width: 100, flexShrink: 0 } }"
       >
@@ -13,22 +13,28 @@
         </FormItem>
         <FormItem>
           <Button class="w-[100px] mr-2" type="primary" @click="searchFn">
+            <SearchOutlined />
             查询
           </Button>
           <Button class="w-[100px]" @click="resetForm">重置</Button>
         </FormItem>
       </Form>
     </section>
-    <section
-      class="bg-white rounded-lg p-5 flex-grow flex flex-col overflow-hidden space-y-4"
-    >
-      <div class="flex space-x-2 flex-shrink-0">
-        <Button type="primary" class="w-[100px]" @click="addConfig">
-          新增
-        </Button>
+    <section class="management-card">
+      <div class="management-toolbar">
+        <div>
+          <h2 class="management-toolbar-title">考核设置</h2>
+          <p class="management-toolbar-desc">配置考核主题、答辩规则、提问追问与预约安排</p>
+        </div>
+        <div class="management-toolbar-right">
+          <Button type="primary" class="w-[100px]" @click="addConfig">
+            <PlusOutlined />
+            新增
+          </Button>
+        </div>
       </div>
       <div
-        class="w-full flex-grow overflow-y-auto space-y-4 pb-6"
+        class="settings-list"
         v-loading="loading"
         :class="
           dataSource.length == 0 && isResult
@@ -37,13 +43,18 @@
         "
       >
         <template v-if="dataSource.length">
-          <Card v-for="(item, index) in dataSource" :key="item?.id">
-            <template #title>
-              <span>{{ item?.theme }}</span>
-            </template>
-            <template #extra>
-              <div class="space-x-2">
+          <article
+            v-for="item in dataSource"
+            :key="item?.id"
+            class="setting-card"
+          >
+            <div class="setting-card-header">
+              <div class="setting-card-title">
+                <span>{{ item?.theme }}</span>
+              </div>
+              <div class="setting-actions">
                 <Button type="primary" @click="() => updateConfig(item)">
+                  <EditOutlined />
                   修改
                 </Button>
                 <Button
@@ -52,135 +63,111 @@
                   @click="() => openSubscribe(item)"
                   v-if="item?.needAppoint"
                 >
+                  <CalendarOutlined />
                   预约设置
                 </Button>
                 <Button type="primary" danger @click="() => delFn(item)">
+                  <DeleteOutlined />
                   删除
                 </Button>
               </div>
-            </template>
-            <template #default>
-              <div class="grid grid-cols-5 text-black gap-4">
-                <section class="descrption">
-                  <div class="descrption-label">考核总分：</div>
-                  <div class="descrption-content">{{ item?.totalScore }}</div>
-                </section>
-                <section class="descrption">
-                  <div class="descrption-label">及格分：</div>
-                  <div class="descrption-content">{{ item?.passScore }}</div>
-                </section>
-                <section class="descrption">
-                  <div class="descrption-label">是否答辩：</div>
-                  <div class="descrption-content">
-                    {{ item?.defense ? "是" : "否" }}
-                  </div>
-                </section>
-                <section class="descrption" v-if="item?.defense">
-                  <div class="descrption-label">答辩时长（秒）：</div>
-                  <div class="descrption-content">{{ item?.duration }}</div>
-                </section>
-                <section class="descrption">
-                  <div class="descrption-label">是否提问：</div>
-                  <div class="descrption-content">
-                    {{ item?.question ? "是" : "否" }}
-                  </div>
-                </section>
-                <section class="descrption" v-if="item?.question">
-                  <div class="descrption-label">提问个数：</div>
-                  <div class="descrption-content">
-                    {{ item?.questionCount }}
-                  </div>
-                </section>
-                <section class="descrption" v-if="item?.question">
-                  <div class="descrption-label">每个提问回答时长（秒）：</div>
-                  <div class="descrption-content">{{ item?.answerTime }}</div>
-                </section>
-                <section class="descrption" v-if="item?.question">
-                  <div class="descrption-label">是否追问：</div>
-                  <div class="descrption-content">
-                    {{ item?.followUp ? "是" : "否" }}
-                  </div>
-                </section>
-                <section
-                  class="descrption"
-                  v-if="item?.question && item?.followUp"
-                >
-                  <div class="descrption-label">追问次数：</div>
-                  <div class="descrption-content">
-                    {{ item?.followUpCount }}
-                  </div>
-                </section>
-
-                <!-- <section
-                  class="descrption"
-                  v-if="
-                    item?.followUp && item?.followUpStandards && item?.question
-                  "
-                >
-                  <div class="descrption-label">追问标准：</div>
-                  <div
-                    class="descrption-content !text-[#1677FF] cursor-pointer"
-                    @click="() => openView(item?.followUpStandards, '追问标准')"
+            </div>
+            <div class="setting-grid">
+              <section class="setting-field">
+                <div class="setting-label">考核总分</div>
+                <div class="setting-value">{{ item?.totalScore }}</div>
+              </section>
+              <section class="setting-field">
+                <div class="setting-label">及格分</div>
+                <div class="setting-value">{{ item?.passScore }}</div>
+              </section>
+              <section class="setting-field">
+                <div class="setting-label">是否答辩</div>
+                <div class="setting-value">{{ item?.defense ? "是" : "否" }}</div>
+              </section>
+              <section class="setting-field" v-if="item?.defense">
+                <div class="setting-label">答辩时长（秒）</div>
+                <div class="setting-value">{{ item?.duration }}</div>
+              </section>
+              <section class="setting-field">
+                <div class="setting-label">是否提问</div>
+                <div class="setting-value">{{ item?.question ? "是" : "否" }}</div>
+              </section>
+              <section class="setting-field" v-if="item?.question">
+                <div class="setting-label">提问个数</div>
+                <div class="setting-value">{{ item?.questionCount }}</div>
+              </section>
+              <section class="setting-field" v-if="item?.question">
+                <div class="setting-label">单题回答时长（秒）</div>
+                <div class="setting-value">{{ item?.answerTime }}</div>
+              </section>
+              <section class="setting-field" v-if="item?.question">
+                <div class="setting-label">是否追问</div>
+                <div class="setting-value">{{ item?.followUp ? "是" : "否" }}</div>
+              </section>
+              <section class="setting-field" v-if="item?.question && item?.followUp">
+                <div class="setting-label">追问次数</div>
+                <div class="setting-value">{{ item?.followUpCount }}</div>
+              </section>
+              <section class="setting-field">
+                <div class="setting-label">是否显示结果</div>
+                <div class="setting-value">{{ item?.showResult ? "是" : "否" }}</div>
+              </section>
+              <section class="setting-field" v-if="item?.assessmentRequirements">
+                <div class="setting-label">考核要求</div>
+                <div class="setting-value">
+                  <button
+                    class="setting-link"
+                    type="button"
+                    @click="() => openView(item?.assessmentRequirements, '考核要求')"
                   >
                     查看全部
-                  </div>
-                </section> -->
-                <section class="descrption">
-                  <div class="descrption-label">是否显示结果：</div>
-                  <div class="descrption-content">
-                    {{ item?.showResult ? "是" : "否" }}
-                  </div>
-                </section>
-                <section class="descrption" v-if="item?.assessmentRequirements">
-                  <div class="descrption-label">考核要求：</div>
-                  <div
-                    class="descrption-content !text-[#1677FF] cursor-pointer"
-                    @click="
-                      () => openView(item?.assessmentRequirements, '考核要求')
-                    "
+                  </button>
+                </div>
+              </section>
+              <section class="setting-field" v-if="item?.assessmentCriteria">
+                <div class="setting-label">考核标准</div>
+                <div class="setting-value">
+                  <button
+                    class="setting-link"
+                    type="button"
+                    @click="() => openView(item?.assessmentCriteria, '考核标准')"
                   >
                     查看全部
-                  </div>
-                </section>
-                <section class="descrption" v-if="item?.assessmentCriteria">
-                  <div class="descrption-label">考核标准：</div>
-                  <div
-                    class="descrption-content !text-[#1677FF] cursor-pointer"
-                    @click="
-                      () => openView(item?.assessmentCriteria, '考核标准')
-                    "
-                  >
-                    查看全部
-                  </div>
-                </section>
-                <section class="descrption">
-                  <div class="descrption-label">考试参与学生：</div>
-                  <div
-                    class="descrption-content !text-[#1677FF] cursor-pointer"
+                  </button>
+                </div>
+              </section>
+              <section class="setting-field">
+                <div class="setting-label">考试参与学生</div>
+                <div class="setting-value">
+                  <button
+                    class="setting-link"
+                    type="button"
                     @click="() => viewOpenStudent(item)"
                   >
                     查看学生
-                  </div>
-                </section>
-                <section class="descrption" v-if="item?.needAppoint">
-                  <div class="descrption-label">是否设置预约：</div>
-                  <div class="descrption-content">
-                    <span>是</span>
-                    <span
-                      class="!text-[#1677FF] cursor-pointer pl-4"
-                      @click="openSubscribeDetail(item)"
-                    >
-                      预约详情
-                    </span>
-                  </div>
-                </section>
+                  </button>
+                </div>
+              </section>
+              <section class="setting-field" v-if="item?.needAppoint">
+                <div class="setting-label">预约设置</div>
+                <div class="setting-value">
+                  <span>是</span>
+                  <button
+                    class="setting-link setting-link-inline"
+                    type="button"
+                    @click="openSubscribeDetail(item)"
+                  >
+                    预约详情
+                  </button>
+                </div>
+              </section>
               </div>
-            </template>
-          </Card>
+          </article>
         </template>
         <Empty v-if="!dataSource.length && isResult" />
       </div>
-      <div class="flex-shrink-0 flex justify-end">
+      <div class="setting-pagination">
         <Pagination
           show-quick-jumper
           :total="total"
@@ -205,12 +192,18 @@ import {
   Input,
   Button,
   Modal,
-  Card,
   message,
   Empty,
 } from "ant-design-vue";
 import { createVNode, onMounted, ref, watch } from "vue";
-import { ExclamationCircleOutlined } from "@ant-design/icons-vue";
+import {
+  CalendarOutlined,
+  DeleteOutlined,
+  EditOutlined,
+  ExclamationCircleOutlined,
+  PlusOutlined,
+  SearchOutlined,
+} from "@ant-design/icons-vue";
 import AssessmentCriteriaModal from "./components/AssessmentCriteriaModal.vue";
 import HandleAssessment from "./components/HandleAssessment.vue";
 import ViewStudentModal from "./components/ViewStudentModal.vue";
@@ -313,22 +306,7 @@ const openSubscribeDetail = (record: Recordable) => {
   align-items: center;
   flex-wrap: nowrap;
 }
-.descrption {
-  display: flex;
-  align-items: center;
-}
-.descrption-label {
-  font-weight: normal;
-  font-size: 14px;
-  color: rgba(0, 0, 0, 0.45);
-  flex-shrink: 0;
-}
-.descrption-content {
-  font-weight: normal;
-  font-size: 14px;
-  color: rgba(0, 0, 0, 0.88);
-  flex-grow: 1;
-  white-space: wrap;
-  overflow: hidden;
+.setting-link-inline {
+  margin-left: 12px;
 }
 </style>

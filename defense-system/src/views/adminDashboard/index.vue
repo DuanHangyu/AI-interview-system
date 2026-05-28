@@ -1,10 +1,10 @@
 <template>
-  <div class="size-full flex flex-col gap-y-4">
-    <section class="bg-white rounded-lg p-4 flex-shrink-0">
+  <div class="management-view">
+    <section class="management-filter">
       <Form
         layout="inline"
         ref="formRef"
-        class="grid grid-cols-4 gap-2"
+        class="grid grid-cols-4 gap-3"
         :model="params"
         :label-col="{ style: { width: 100, flexShrink: 0 } }"
       >
@@ -19,19 +19,27 @@
         </FormItem>
         <FormItem>
           <Button class="w-[100px] mr-2" type="primary" @click="searchFn">
+            <SearchOutlined />
             查询
           </Button>
           <Button class="w-[100px]" @click="resetForm">重置</Button>
         </FormItem>
       </Form>
     </section>
-    <section class="bg-white rounded-lg p-5 flex-grow">
-      <div class="flex space-x-2">
-        <Button type="primary" class="w-[100px]" @click="addTeacher">
-          新增
-        </Button>
+    <section class="management-card">
+      <div class="management-toolbar">
+        <div>
+          <h2 class="management-toolbar-title">教师账号</h2>
+          <p class="management-toolbar-desc">管理教师登录账号、联系方式和创建记录</p>
+        </div>
+        <div class="management-toolbar-right">
+          <Button type="primary" class="w-[100px]" @click="addTeacher">
+            <PlusOutlined />
+            新增
+          </Button>
+        </div>
       </div>
-      <div class="w-full mt-4 tableContainer" ref="tableContainer">
+      <div class="management-table tableContainer" ref="tableContainer">
         <Table
           :columns="columns"
           :data-source="dataSource"
@@ -45,6 +53,7 @@
             showTotal: (t) => `共 ${t} 条`,
           }"
           :scroll="{
+            x: 'max-content',
             y: tableHeight,
           }"
           :loading="loading"
@@ -53,7 +62,7 @@
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'action'">
-              <div class="space-x-2">
+              <div class="action-cell">
                 <Button type="primary" @click="() => updateTeacher(record)">
                   修改
                 </Button>
@@ -82,7 +91,11 @@ import {
 } from "ant-design-vue";
 import { createVNode, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import HandleModal from "./components/HandleModal.vue";
-import { ExclamationCircleOutlined } from "@ant-design/icons-vue";
+import {
+  ExclamationCircleOutlined,
+  PlusOutlined,
+  SearchOutlined,
+} from "@ant-design/icons-vue";
 import { getTeacherPageList, deleteTeacher } from "@/api/teacher";
 
 const columns = [
@@ -211,7 +224,7 @@ const changeFn = (e: TablePaginationConfig) => {
 </script>
 <style scoped>
 .tableContainer {
-  height: calc(100% - 32px - 16px);
+  min-height: 0;
 }
 :deep(.ant-form-item-row) {
   display: flex;

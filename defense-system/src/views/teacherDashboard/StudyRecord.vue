@@ -1,10 +1,10 @@
 <template>
-  <div class="size-full flex flex-col gap-y-4">
-    <section class="bg-white rounded-lg p-4 flex-shrink-0">
+  <div class="management-view">
+    <section class="management-filter">
       <Form
         layout="inline"
         ref="formRef"
-        class="grid grid-cols-4 gap-2"
+        class="grid grid-cols-4 gap-3"
         :model="params"
         :label-col="{ style: { width: 100, flexShrink: 0 } }"
       >
@@ -24,17 +24,27 @@
         </FormItem> -->
         <FormItem>
           <Button class="w-[100px] mr-2" type="primary" @click="searchFn">
+            <SearchOutlined />
             查询
           </Button>
           <Button class="w-[100px]" @click="resetForm">重置</Button>
         </FormItem>
       </Form>
     </section>
-    <section class="bg-white rounded-lg p-5 flex-grow flex flex-col">
-      <Button type="primary" class="mb-4 flex-shrink-0 w-fit" @click="exportFn">
-        导出学生报告
-      </Button>
-      <div class="w-full flex-grow" ref="tableContainer">
+    <section class="management-card">
+      <div class="management-toolbar">
+        <div>
+          <h2 class="management-toolbar-title">考核记录</h2>
+          <p class="management-toolbar-desc">查看答辩结果、核分并导出学生报告</p>
+        </div>
+        <div class="management-toolbar-right">
+          <Button type="primary" class="w-fit" @click="exportFn">
+            <DownloadOutlined />
+            导出学生报告
+          </Button>
+        </div>
+      </div>
+      <div class="management-table" ref="tableContainer">
         <Table
           :columns="columns"
           :row-selection="{
@@ -52,6 +62,7 @@
             showTotal: (t) => `共 ${t} 条`,
           }"
           :scroll="{
+            x: 'max-content',
             y: tableHeight,
           }"
           row-key="id"
@@ -60,26 +71,24 @@
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'score'">
-              <div
-                class="size-11 rounded-full bg-[#1677FF] flex items-center justify-center text-white"
-              >
-                <span class="font-semibold text-lg">
+              <div class="score-orb">
+                <span class="score-orb-value">
                   {{ record?.score || 0 }}
                 </span>
-                <span class="font-semibold text-[11px] pt-[5px]">分</span>
+                <span class="score-orb-unit">分</span>
               </div>
             </template>
             <template v-if="column.key === 'checkScore'">
               <div class="flex items-center space-x-[10px]">
                 <span>{{ record?.checkScore || record?.score || 0 }}分</span>
                 <EditOutlined
-                  class="cursor-pointer"
+                  class="cursor-pointer score-edit"
                   @click="() => updateScore(record)"
                 />
               </div>
             </template>
             <template v-if="column.key === 'action'">
-              <div class="flex items-center space-x-2">
+              <div class="action-cell">
                 <Button type="primary" @click="goDetail(record)">
                   查看详情
                 </Button>
@@ -113,7 +122,12 @@ import {
   Modal,
 } from "ant-design-vue";
 import { createVNode, nextTick, onMounted, onUnmounted, ref } from "vue";
-import { EditOutlined, ExclamationCircleOutlined } from "@ant-design/icons-vue";
+import {
+  DownloadOutlined,
+  EditOutlined,
+  ExclamationCircleOutlined,
+  SearchOutlined,
+} from "@ant-design/icons-vue";
 import UpdateTeacherScoreModal from "./components/UpdateTeacherScoreModal.vue";
 import { useRouter } from "vue-router";
 import {

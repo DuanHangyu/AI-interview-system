@@ -1,10 +1,10 @@
 <template>
-  <div class="size-full flex flex-col gap-y-4">
-    <section class="bg-white rounded-lg p-4 flex-shrink-0">
+  <div class="management-view">
+    <section class="management-filter">
       <Form
         layout="inline"
         ref="formRef"
-        class="grid grid-cols-4 gap-2"
+        class="grid grid-cols-4 gap-3"
         :model="params"
         :label-col="{ style: { width: 100, flexShrink: 0 } }"
       >
@@ -19,25 +19,35 @@
         </FormItem>
         <FormItem>
           <Button class="w-[100px] mr-2" type="primary" @click="searchFn">
+            <SearchOutlined />
             查询
           </Button>
           <Button class="w-[100px]" @click="resetForm">重置</Button>
         </FormItem>
       </Form>
     </section>
-    <section class="bg-white rounded-lg p-5 flex-grow">
-      <div class="flex space-x-2">
-        <Button type="primary" class="w-[100px]" @click="addStudent">
-          新增
-        </Button>
-        <Button type="primary" ghost class="w-[100px]" @click="batchImport">
-          批量导入
-        </Button>
-        <Button type="primary" ghost class="w-[100px]" @click="exportFn">
-          导出
-        </Button>
+    <section class="management-card">
+      <div class="management-toolbar">
+        <div>
+          <h2 class="management-toolbar-title">学生信息</h2>
+          <p class="management-toolbar-desc">维护学生账号、班级与批量导入导出</p>
+        </div>
+        <div class="management-toolbar-right">
+          <Button type="primary" class="w-[100px]" @click="addStudent">
+            <PlusOutlined />
+            新增
+          </Button>
+          <Button type="primary" ghost class="w-[112px]" @click="batchImport">
+            <UploadOutlined />
+            批量导入
+          </Button>
+          <Button type="primary" ghost class="w-[100px]" @click="exportFn">
+            <DownloadOutlined />
+            导出
+          </Button>
+        </div>
       </div>
-      <div class="w-full mt-4 tableContainer" ref="tableContainer">
+      <div class="management-table tableContainer" ref="tableContainer">
         <Table
           :columns="columns"
           :row-selection="{
@@ -55,6 +65,7 @@
             showTotal: (t) => `共 ${t} 条`,
           }"
           :scroll="{
+            x: 'max-content',
             y: tableHeight,
           }"
           :loading="loading"
@@ -63,7 +74,7 @@
         >
           <template #bodyCell="{ column, record }">
             <template v-if="column.key === 'action'">
-              <div class="space-x-2">
+              <div class="action-cell">
                 <Button type="primary" @click="() => updateStudent(record)">
                   修改
                 </Button>
@@ -94,7 +105,13 @@ import {
 import { createVNode, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import HandleStudentModal from "./components/HandleStudentModal.vue";
 import BatchImportModal from "./components/BatchImportModal.vue";
-import { ExclamationCircleOutlined } from "@ant-design/icons-vue";
+import {
+  DownloadOutlined,
+  ExclamationCircleOutlined,
+  PlusOutlined,
+  SearchOutlined,
+  UploadOutlined,
+} from "@ant-design/icons-vue";
 import {
   deleteStudent,
   exportStudent,
@@ -270,7 +287,7 @@ const changeFn = (e: TablePaginationConfig) => {
 </script>
 <style scoped>
 .tableContainer {
-  height: calc(100% - 32px - 16px);
+  min-height: 0;
 }
 :deep(.ant-form-item-row) {
   display: flex;

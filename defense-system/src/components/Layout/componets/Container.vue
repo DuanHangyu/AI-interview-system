@@ -1,16 +1,16 @@
 <template>
-  <div
-    class="w-screen h-screen overflow-hidden pt-2 px-[24px] pb-[18px] flex flex-col space-y-3 d_body"
-  >
-    <Header class="flex-shrink-0" />
-    <div class="content flex-grow overflow-hidden">
+  <main class="console-layout">
+    <div class="console-frame">
+      <Header class="console-header-wrap" />
+      <section class="console-content">
       <router-view v-slot="{ Component, route }">
         <keep-alive :include="['AdminDashboard', 'TeacherDashboard']">
           <component :is="Component" :key="route.path" />
         </keep-alive>
       </router-view>
+      </section>
     </div>
-  </div>
+  </main>
 </template>
 <script setup lang="ts">
 import { Header } from "@/components/Layout";
@@ -19,12 +19,38 @@ defineOptions({
 });
 </script>
 <style scoped>
-.d_body {
-  background-image: url("@/assets/background2.png");
-  /* 统一背景图 */
-  background-size: cover;
-  background-repeat: no-repeat;
-  background-attachment: fixed;
-  background-position: center center;
+.console-layout {
+  width: 100vw;
+  height: 100vh;
+  padding: 28px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.36), rgba(0, 0, 0, 0.18)),
+    linear-gradient(135deg, #eeeeec 0%, #d5d5d2 45%, #7f807d 100%);
+}
+
+.console-frame {
+  width: min(1500px, 100%);
+  height: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.console-header-wrap {
+  flex-shrink: 0;
+}
+
+.console-content {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+@media (max-width: 900px) {
+  .console-layout {
+    padding: 16px;
+  }
 }
 </style>
