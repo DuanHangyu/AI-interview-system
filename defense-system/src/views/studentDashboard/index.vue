@@ -20,7 +20,7 @@
             @click="noticeOpen = true"
           >
             <BellOutlined />
-            <span class="notice-dot">{{ noticeItems.length }}</span>
+            <span class="notice-dot" v-if="unreadNoticeCount">{{ unreadNoticeCount }}</span>
           </button>
           <Dropdown placement="bottomRight" trigger="click" :arrow="false">
             <button class="user-chip" type="button">
@@ -325,7 +325,17 @@
       class="student-action-modal"
     >
       <div class="modal-list">
-        <article v-for="item in noticeItems" :key="item.title">
+        <div class="notice-toolbar">
+          <span>{{ unreadNoticeCount ? `${unreadNoticeCount} 条未读消息` : "消息已全部读完" }}</span>
+          <button type="button" :disabled="!unreadNoticeCount" @click="markAllNoticesRead">
+            全部已读
+          </button>
+        </div>
+        <article
+          v-for="item in noticeItems"
+          :key="item.id"
+          :class="{ read: isNoticeRead(item.id) }"
+        >
           <span>
             <component :is="item.icon" />
           </span>
@@ -333,7 +343,17 @@
             <strong>{{ item.title }}</strong>
             <small>{{ item.desc }}</small>
           </div>
-          <button type="button" @click="item.action">处理</button>
+          <div class="notice-actions">
+            <button
+              type="button"
+              class="read-action"
+              :disabled="isNoticeRead(item.id)"
+              @click="markNoticeRead(item.id)"
+            >
+              {{ isNoticeRead(item.id) ? "已读" : "标为已读" }}
+            </button>
+            <button type="button" @click="handleNoticeAction(item)">处理</button>
+          </div>
         </article>
       </div>
     </Modal>
@@ -522,6 +542,7 @@ const deviceItems = [
   { label: "网络", icon: markRaw(WifiOutlined) },
 ];
 
+const NOTICE_STORAGE_KEY = "student-dashboard-read-notices";
 const tab = ref(1);
 const sidebarActive = ref("home");
 const noticeOpen = ref(false);
@@ -533,6 +554,7 @@ const detailTask = ref<Recordable | null>(null);
 const updatePass = ref();
 const statisticLoaded = ref(false);
 const statisticLoading = ref(false);
+const readNoticeIds = ref<string[]>([]);
 const statistic = ref<Recordable>({
   all: 0,
   toAppoint: 0,
@@ -765,26 +787,53 @@ const tabCount = (key: number) => {
   return tab.value === key ? total.value : 0;
 };
 
-const noticeItems = computed(() => [
-  {
-    title: "待预约考核",
-    desc: `${tabCount(1)} 场考核等待预约时间`,
-    icon: markRaw(CalendarOutlined),
-    action: () => {
-      noticeOpen.value = false;
-      handleSideNav("schedule");
-    },
-  },
-  {
-    title: "待完成面试",
-    desc: `${tabCount(2)} 场面试需要按时进入`,
-    icon: markRaw(PlayCircleOutlined),
-    action: () => {
-      noticeOpen.value = false;
-      handleSideNav("assessment");
-    },
-  },
-  {
+const noticeItems = computed<Recordable[]>(() => {
+  const items: Recordable[] = [];
+  const appointmentCount = tabCount(1);
+  const todoCount = tabCount(2);
+  const analysisCount = Number(statistic.value?.analysis || 0);
+
+  if (appointmentCount > 0) {
+    items.push({
+      id: "appointment",
+      title: "待预约考核",
+      desc: `${appointmentCount} 场考核等待预约时间`,
+      icon: markRaw(CalendarOutlined),
+      action: () => {
+        noticeOpen.value = false;
+        handleSideNav("schedule");
+      },
+    });
+  }
+
+  if (todoCount > 0) {
+    items.push({
+      id: "todo",
+      title: "待完成面试",
+      desc: `${todoCount} 场面试需要按时进入`,
+      icon: markRaw(PlayCircleOutlined),
+      action: () => {
+        noticeOpen.value = false;
+        handleSideNav("assessment");
+      },
+    });
+  }
+
+  if (analysisCount > 0) {
+    items.push({
+      id: "analysis",
+      title: "报告生成中",
+      desc: `${analysisCount} 份报告正在评估，完成后可查看复盘`,
+      icon: markRaw(InboxOutlined),
+      action: () => {
+        noticeOpen.value = false;
+        handleSideNav("report");
+      },
+    });
+  }
+
+  items.push({
+    id: "device",
     title: "设备检测",
     desc: "建议在进入面试前完成浏览器设备检测",
     icon: markRaw(VideoCameraOutlined),
@@ -792,8 +841,35 @@ const noticeItems = computed(() => [
       noticeOpen.value = false;
       openDeviceCheck();
     },
-  },
-]);
+  });
+
+  return items;
+});
+
+const isNoticeRead = (id: string) => readNoticeIds.value.includes(id);
+const unreadNoticeCount = computed(
+  () => noticeItems.value.filter((item) => !isNoticeRead(item.id)).length
+);
+
+const saveReadNoticeIds = () => {
+  localStorage.setItem(NOTICE_STORAGE_KEY, JSON.stringify(readNoticeIds.value));
+};
+
+const markNoticeRead = (id: string) => {
+  if (isNoticeRead(id)) return;
+  readNoticeIds.value = [...readNoticeIds.value, id];
+  saveReadNoticeIds();
+};
+
+const markAllNoticesRead = () => {
+  readNoticeIds.value = Array.from(new Set(noticeItems.value.map((item) => item.id)));
+  saveReadNoticeIds();
+};
+
+const handleNoticeAction = (item: Recordable) => {
+  markNoticeRead(item.id);
+  item.action?.();
+};
 
 const helpItems = [
   {
@@ -1149,6 +1225,13 @@ const runDeviceCheck = async () => {
 };
 
 onMounted(() => {
+  try {
+    readNoticeIds.value = JSON.parse(
+      localStorage.getItem(NOTICE_STORAGE_KEY) || "[]"
+    );
+  } catch (error) {
+    readNoticeIds.value = [];
+  }
   onList();
   loadStatistic();
   refreshMachineTime();
@@ -1185,8 +1268,9 @@ const cancelSubscribe = (e: Recordable) => {
   padding: 28px;
   overflow-y: auto;
   background:
-    radial-gradient(circle at 78% 18%, rgba(244, 207, 85, 0.24), transparent 28%),
-    linear-gradient(180deg, #d6d4d0 0%, #aaa8a2 100%);
+    radial-gradient(circle at 78% 16%, rgba(255, 226, 112, 0.2), transparent 24%),
+    radial-gradient(circle at 18% 10%, rgba(255, 255, 255, 0.22), transparent 28%),
+    linear-gradient(180deg, #bebdb9 0%, #a8a7a2 58%, #8f8e8a 100%);
   color: #17181a;
 }
 
@@ -1198,10 +1282,11 @@ const cancelSubscribe = (e: Recordable) => {
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: 28px;
   background:
-    linear-gradient(125deg, rgba(255, 255, 255, 0.82), rgba(251, 248, 235, 0.9)),
-    rgba(248, 248, 240, 0.9);
+    radial-gradient(circle at 78% 14%, rgba(255, 229, 108, 0.34), transparent 26%),
+    linear-gradient(125deg, rgba(245, 246, 241, 0.92), rgba(255, 250, 219, 0.82)),
+    rgba(246, 246, 239, 0.92);
   box-shadow:
-    0 32px 90px rgba(32, 33, 31, 0.22),
+    0 34px 92px rgba(31, 32, 30, 0.26),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
@@ -1356,13 +1441,18 @@ const cancelSubscribe = (e: Recordable) => {
   flex-direction: column;
   gap: 18px;
   padding: 16px;
-  border: 1px solid rgba(23, 24, 26, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 24px;
-  background: rgba(255, 255, 247, 0.72);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  background:
+    radial-gradient(circle at 30% 0%, rgba(255, 255, 255, 0.12), transparent 30%),
+    linear-gradient(180deg, #555652 0%, #3b3c39 46%, #2d2e2b 100%);
+  box-shadow:
+    0 24px 60px rgba(37, 38, 35, 0.26),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .profile-card {
+  padding: 8px 6px 4px;
   text-align: center;
 }
 
@@ -1374,23 +1464,26 @@ const cancelSubscribe = (e: Recordable) => {
   margin: 18px auto 14px;
   border-radius: 999px;
   background:
-    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.2), transparent 32%),
-    linear-gradient(145deg, #4c4d48, #232422);
-  color: #fff;
-  box-shadow: 0 18px 38px rgba(35, 36, 34, 0.24);
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.78), transparent 24%),
+    linear-gradient(145deg, #f8f8f0, #d9d9d2);
+  color: #2d2e2b;
+  box-shadow:
+    0 18px 38px rgba(20, 21, 20, 0.24),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.52);
   font-size: 42px;
   font-weight: 850;
 }
 
 .profile-card h2 {
   margin: 0;
+  color: #f7f7ef;
   font-size: 24px;
   font-weight: 850;
 }
 
 .profile-card p {
   margin: 8px 0 10px;
-  color: #6c6e68;
+  color: rgba(247, 247, 239, 0.58);
   font-size: 13px;
   font-weight: 700;
 }
@@ -1424,8 +1517,8 @@ const cancelSubscribe = (e: Recordable) => {
   gap: 12px;
   padding: 0 14px;
   border-radius: 14px;
-  background: transparent;
-  color: #4f514c;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(247, 247, 239, 0.58);
   font-size: 15px;
   font-weight: 750;
   text-align: left;
@@ -1433,8 +1526,11 @@ const cancelSubscribe = (e: Recordable) => {
 
 .sidebar-nav button.active,
 .sidebar-nav button:hover {
-  background: linear-gradient(90deg, rgba(244, 207, 85, 0.44), rgba(244, 207, 85, 0.18));
-  color: #17181a;
+  background: rgba(255, 255, 255, 0.13);
+  color: #fff;
+  box-shadow:
+    inset 3px 0 0 #f4cf55,
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .trust-card {
@@ -1445,23 +1541,24 @@ const cancelSubscribe = (e: Recordable) => {
   gap: 7px;
   margin-top: auto;
   padding: 18px;
-  border: 1px solid rgba(23, 24, 26, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.09);
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(26, 27, 25, 0.22);
 }
 
 .trust-card :deep(.anticon) {
-  color: #2f302f;
+  color: #f4cf55;
   font-size: 22px;
 }
 
 .trust-card strong {
+  color: #fff;
   font-size: 15px;
   font-weight: 850;
 }
 
 .trust-card span {
-  color: #777a72;
+  color: rgba(247, 247, 239, 0.54);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -2187,6 +2284,37 @@ const cancelSubscribe = (e: Recordable) => {
   gap: 12px;
 }
 
+.notice-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 2px 8px;
+}
+
+.notice-toolbar span {
+  color: #62645f;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.notice-toolbar button {
+  height: 34px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(47, 48, 47, 0.08);
+  color: #2f302f;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.notice-toolbar button:disabled {
+  opacity: 0.44;
+  cursor: not-allowed;
+}
+
 .modal-list article,
 .device-check-list article {
   display: grid;
@@ -2197,6 +2325,11 @@ const cancelSubscribe = (e: Recordable) => {
   border: 1px solid rgba(23, 24, 26, 0.08);
   border-radius: 16px;
   background: rgba(255, 255, 247, 0.76);
+}
+
+.modal-list article.read {
+  opacity: 0.62;
+  background: rgba(245, 245, 238, 0.58);
 }
 
 .modal-list article > span,
@@ -2251,6 +2384,22 @@ const cancelSubscribe = (e: Recordable) => {
   cursor: pointer;
   font-size: 12px;
   font-weight: 850;
+}
+
+.notice-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-list button.read-action {
+  background: rgba(47, 48, 47, 0.08);
+  color: #3c3d39;
+}
+
+.modal-list button:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
 }
 
 .task-detail-modal header {
