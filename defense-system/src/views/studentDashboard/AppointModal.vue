@@ -48,8 +48,6 @@ const points = ref<Recordable[]>([]);
 
 defineExpose({
   openModal: (e: Record<string, any> = {}) => {
-    open.value = true;
-    formState.value = { timePeriod: undefined, id: e?.id };
     points.value =
       e?.canAppointmentTimes?.map((item: Recordable) => {
         item.timePeriodLabel = `${item?.timePeriod}${
@@ -60,6 +58,12 @@ defineExpose({
         item.disabled = item?.full;
         return item;
       }) || [];
+    if (!points.value.some((item) => !item?.disabled)) {
+      message.info("暂无可预约时间段，请联系教师开放新的预约时间");
+      return;
+    }
+    open.value = true;
+    formState.value = { timePeriod: undefined, id: e?.id };
   },
 });
 const submit = () => {

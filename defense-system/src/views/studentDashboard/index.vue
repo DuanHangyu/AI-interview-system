@@ -1041,7 +1041,17 @@ const startFn = async (e: Recordable) => {
   }
 };
 
+const hasAvailableAppointmentTimes = (item?: Recordable | null) => {
+  return Array.isArray(item?.canAppointmentTimes)
+    ? item.canAppointmentTimes.some((time: Recordable) => !time?.full)
+    : false;
+};
+
 const toAppoint = (e: Record<string, any>) => {
+  if (!hasAvailableAppointmentTimes(e)) {
+    message.info("暂无可预约时间段，请联系教师开放新的预约时间");
+    return;
+  }
   appointRef.value?.openModal(e);
 };
 
@@ -1102,26 +1112,39 @@ const isAnalysisTask = (item?: Recordable | null) => {
 
 const statusText = (item: Recordable) => {
   if (isAnalysisTask(item)) return "正在评估";
-  if (tab.value == 1) return "待预约";
+  if (tab.value == 1) {
+    return hasAvailableAppointmentTimes(item) ? "待预约" : "暂无可约";
+  }
   if (tab.value == 2) return canStart(item) ? "可开始" : "已预约";
   if (item?.state == 2) return "已完成";
   if (isReappointLocked(item)) return "暂不可约";
-  if (canReappoint(item)) return "可重约";
+  if (canReappoint(item)) {
+    return hasAvailableAppointmentTimes(item) ? "可重约" : "暂无可约";
+  }
   return "已结束";
 };
 
 const primaryActionText = (item: Recordable) => {
   if (!item) return "暂无任务";
-  if (tab.value === 1) return "立即预约";
+  if (tab.value === 1) {
+    return hasAvailableAppointmentTimes(item) ? "立即预约" : "暂无可约";
+  }
   if (tab.value === 2) return canStart(item) ? "开始考核" : "未到时间";
   if (isAnalysisTask(item)) return "正在评估";
   if (item?.state === 2) return "查看报告";
-  if (canReappoint(item)) return "重新预约";
+  if (canReappoint(item)) {
+    return hasAvailableAppointmentTimes(item) ? "重新预约" : "暂无可约";
+  }
   return "查看详情";
 };
 
 const primaryDisabled = (item: Recordable) => {
-  return (tab.value === 2 && item && !canStart(item)) || isAnalysisTask(item);
+  return (
+    (tab.value === 2 && item && !canStart(item)) ||
+    isAnalysisTask(item) ||
+    ((tab.value === 1 || canReappoint(item)) &&
+      !hasAvailableAppointmentTimes(item))
+  );
 };
 
 const handlePrimaryAction = (item: Recordable) => {
