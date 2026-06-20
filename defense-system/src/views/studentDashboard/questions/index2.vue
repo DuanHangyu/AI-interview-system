@@ -203,6 +203,7 @@ const showLoading = computed(
 );
 let voiceFallbackTimer: number | undefined = undefined;
 let generateRetryTimer: number | undefined = undefined;
+const mediaRequestTimeoutMs = 10000;
 
 // 心跳间隔（毫秒）
 const HEARTBEAT_INTERVAL = 5000; // 30秒
@@ -241,6 +242,42 @@ function setBlockingError(messageText: string, step: "setup" | "generate" | "ans
 function clearBlockingError() {
   blockingError.value = "";
   resetLoadingText();
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function requestVideoWithTimeout() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return Promise.reject(new Error("当前浏览器不支持摄像头访问"));
+  }
+
+  let finished = false;
+  let timeoutId: number | undefined = undefined;
+  const timeoutMessage = "摄像头权限响应超时，请确认浏览器权限弹窗后重试。";
+  const mediaRequest = navigator.mediaDevices
+    .getUserMedia({ video: true })
+    .then((stream) => {
+      if (finished) {
+        stream.getTracks().forEach((track) => track.stop());
+        throw new Error(timeoutMessage);
+      }
+      return stream;
+    });
+
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, mediaRequestTimeoutMs);
+  });
+
+  return Promise.race([mediaRequest, timeout]).finally(() => {
+    finished = true;
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
+    }
+  });
 }
 
 function handleAnswerAudioConnectionLost() {
@@ -587,7 +624,7 @@ const attemptReconnect = () => {
 
 async function startCamera() {
   try {
-    videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    videoStream = await requestVideoWithTimeout();
     if (videoRef.value) {
       videoRef.value.srcObject = videoStream;
       videoRef.value.onloadedmetadata = () => {
@@ -597,7 +634,10 @@ async function startCamera() {
     return true;
   } catch (err) {
     console.error("摄像头启动失败", err);
-    setBlockingError("无法打开摄像头，请允许浏览器摄像头权限后重试。", "setup");
+    setBlockingError(
+      getErrorMessage(err, "无法打开摄像头，请允许浏览器摄像头权限后重试。"),
+      "setup"
+    );
     return false;
   }
 }

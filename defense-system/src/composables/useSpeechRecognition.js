@@ -6,6 +6,7 @@ export function useSpeechRecognition(options = {}) {
   const transcriptionText = ref("");
   const audioReady = ref(false);
   const audioError = ref("");
+  const mediaRequestTimeoutMs = 10000;
   let ws = ref(null);
   let audioContext = null;
   let micNode = null;
@@ -31,6 +32,37 @@ export function useSpeechRecognition(options = {}) {
       offset += chunk.length;
     });
     return merged;
+  }
+
+  function requestMediaWithTimeout(constraints, timeoutMessage) {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      return Promise.reject(new Error("当前浏览器不支持麦克风访问"));
+    }
+
+    let finished = false;
+    let timeoutId = null;
+    const mediaRequest = navigator.mediaDevices
+      .getUserMedia(constraints)
+      .then((stream) => {
+        if (finished) {
+          stream.getTracks().forEach((track) => track.stop());
+          throw new Error(timeoutMessage);
+        }
+        return stream;
+      });
+
+    const timeout = new Promise((_, reject) => {
+      timeoutId = setTimeout(() => {
+        reject(new Error(timeoutMessage));
+      }, mediaRequestTimeoutMs);
+    });
+
+    return Promise.race([mediaRequest, timeout]).finally(() => {
+      finished = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    });
   }
 
   async function startAudio() {
@@ -218,7 +250,10 @@ export function useSpeechRecognition(options = {}) {
       audioError.value = "";
       audioReady.value = false;
       manuallyClosed = false;
-      audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStream = await requestMediaWithTimeout(
+        { audio: true },
+        "麦克风权限响应超时，请确认浏览器权限弹窗后重试"
+      );
       // { sampleRate: 16000 }
       audioContext = new window.AudioContext({ sampleRate: 16000 });
 
@@ -311,7 +346,8 @@ export function useSpeechRecognition(options = {}) {
       return true;
     } catch (err) {
       audioReady.value = false;
-      audioError.value = "无法打开麦克风，请允许浏览器麦克风权限后重试";
+      audioError.value =
+        err?.message || "无法打开麦克风，请允许浏览器麦克风权限后重试";
       console.error("麦克风打开失败：", err);
       return false;
     }
