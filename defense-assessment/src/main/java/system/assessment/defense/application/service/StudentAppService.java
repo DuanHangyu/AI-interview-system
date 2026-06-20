@@ -23,6 +23,7 @@ import system.assessment.defense.domain.event.StudentCreateEvent;
 import system.assessment.defense.infrastructure.common.FileByteDTO;
 import system.assessment.defense.infrastructure.common.HttpUtils;
 import system.assessment.defense.infrastructure.emuns.ErrorCodeEnums;
+import system.assessment.defense.infrastructure.emuns.UserRoleEnums;
 import system.assessment.defense.infrastructure.exception.BusinessException;
 import system.assessment.defense.infrastructure.repository.dao.po.*;
 import system.assessment.defense.infrastructure.repository.dao.service.*;
@@ -145,6 +146,7 @@ public class StudentAppService {
                         .account(item.getAccount())
                         .password(item.getPassword())
                         .schoolClass(item.getSchoolClass())
+                        .type(UserRoleEnums.STUDENT.getRole())
                         .build())
                 .toList();
         userService.saveBatch(studentPos);

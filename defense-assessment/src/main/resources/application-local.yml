@@ -12,8 +12,8 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     jdbc-url: ${DB_JDBC_URL:jdbc:mysql://127.0.0.1:13307/defense_test?useUnicode=true&characterEncoding=UTF-8&useSSL=false&zeroDateTimeBehavior=convertToNull&useTimezone=true&serverTimezone=GMT%2B8&allowMultiQueries=true}
     url: ${spring.datasource.jdbc-url}
-    username: ${DB_USERNAME:defense_test}
-    password: ${DB_PASSWORD:}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   data:
     redis:
       database: 0
@@ -74,3 +74,9 @@ jetcache:
       valueEncoder: java
       valueDecoder: java
       uri: redis://127.0.0.1:6379/0
+
+# 启用后台定时任务（评分失败重试 schedulerCheckAnalysis、缺勤标记 schedulerCheckStudentAppointment）。
+# 缺省值为 stop（任务空跑）；改为 start 才会真正执行。
+scheduler:
+  start: start
+

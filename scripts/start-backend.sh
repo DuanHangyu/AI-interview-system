@@ -28,6 +28,14 @@ if [[ -z "${DB_JDBC_URL:-}" ]]; then
   echo "DB_JDBC_URL is empty. Set it in $ENV_FILE."
   exit 1
 fi
+if [[ -z "${DB_USERNAME:-}" ]]; then
+  echo "DB_USERNAME is empty. Set it in $ENV_FILE."
+  exit 1
+fi
+if [[ -z "${DB_PASSWORD:-}" ]]; then
+  echo "DB_PASSWORD is empty. Set it in $ENV_FILE."
+  exit 1
+fi
 
 DB_HOST_PORT="${DB_JDBC_URL#jdbc:mysql://}"
 DB_HOST_PORT="${DB_HOST_PORT%%/*}"

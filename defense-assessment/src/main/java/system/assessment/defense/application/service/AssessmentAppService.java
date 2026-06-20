@@ -528,11 +528,11 @@ public class AssessmentAppService {
                                     .map(appointment -> toAppointmentStudentDTO(appointment, userIdMap.getOrDefault(appointment.getStudentId(), UserPO.EMPTY_USER)))
                                     .toList())
                             .alreadyAssessStudents(matchAppointments.stream()
-                                    .filter(record -> record.getState() == 2)
+                                    .filter(record -> Objects.equals(record.getState(), 2))
                                     .map(appointment -> toAppointmentStudentDTO(appointment, userIdMap.getOrDefault(appointment.getStudentId(), UserPO.EMPTY_USER)))
                                     .toList())
                             .expiredStudents(matchAppointments.stream()
-                                    .filter(record -> record.getState() == 3 || record.getState() == 4)
+                                    .filter(record -> Objects.equals(record.getState(), 3) || Objects.equals(record.getState(), 4))
                                     .map(appointment -> toAppointmentStudentDTO(appointment, userIdMap.getOrDefault(appointment.getStudentId(), UserPO.EMPTY_USER)))
                                     .toList())
                             .build();
@@ -546,7 +546,7 @@ public class AssessmentAppService {
         studentDTO.setStudentName(userPO.getName());
         studentDTO.setSchoolClass(userPO.getSchoolClass());
         Integer punishState = appointmentPO.getPunishState();
-        if (punishState != -1) {
+        if (punishState != null && !Objects.equals(punishState, -1)) {
             studentDTO.setPunishState(punishState);
         }
         return studentDTO;

@@ -432,8 +432,9 @@ watch(
   async ([ready, voiceReady, status]: any) => {
     if (ready && voiceReady && status && !isFirst.value) {
       isFirst.value = true;
+      // FIX-F: 仅发起 start-assessment；第 1 题由后端在题目生成完成后主动推送，
+      // 避免此处立即请求命中「题目正在生成中」空缓存。第 2..N 题仍由答题后的 generateQuestions() 链路获取。
       startAssessment();
-      generateQuestions();
     }
   }
 );

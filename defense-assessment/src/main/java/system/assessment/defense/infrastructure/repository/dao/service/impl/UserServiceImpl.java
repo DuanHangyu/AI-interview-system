@@ -63,7 +63,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, UserPO> implements 
             List<StudentAssessmentAppointmentPO> studentAssessmentAppointmentPOS = appointmentMapper.selectWithLocationByStudentId(userId);
             // 如果考核了，不通过，可以重新预约，此时预约的状态为0，那已完成的考核就不要查出来了
             List<Integer> appointingAssessmentIds = studentAssessmentAppointmentPOS.stream()
-                    .filter(item -> item.getState() == 0 || item.getState() == 1)
+                    .filter(item -> item.getState() == null || Objects.equals(item.getState(), 0) || Objects.equals(item.getState(), 1))
                     .map(StudentAssessmentAppointmentPO::getAssessmentId)
                     .distinct().toList();
             summary.setRecords(recordMapper.selectList(Wrappers.lambdaQuery(StudentAssessmentRecordPO.class)

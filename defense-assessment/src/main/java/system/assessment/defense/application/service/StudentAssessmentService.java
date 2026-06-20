@@ -3,6 +3,7 @@ package system.assessment.defense.application.service;
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -60,6 +61,9 @@ public class StudentAssessmentService {
     private static final Map<Integer, ByteArrayOutputStream> VOICE_MAP = new ConcurrentHashMap<>();
 
     private static final int MIN_VALID_AUDIO_BYTES = 2048;
+    private static final int APPOINTMENT_CONFIRMED = 0;
+    private static final int APPOINTMENT_IN_ASSESSMENT = 1;
+    private static final int APPOINTMENT_MISSED = 3;
 
     // 现场生成的题目缓存 key: studentId:assessmentId
     private static final Map<String, List<LiveQuestion>> LIVE_QUESTION_MAP = new ConcurrentHashMap<>();
@@ -291,9 +295,14 @@ public class StudentAssessmentService {
         }
 
         log.info("schedulerCheckAnalysis开始执行");
+        // FIX-D: 兜底两类卡死——(1) 正常失败 reAnalysis=false；(2) JVM 在 endAssessment 中途崩溃等
+        // 导致 reAnalysis=true 但已陈旧的记录（6 分钟 = 2× cron 周期，确保当前在途行不会被下一轮误抓）。
         List<StudentAssessmentRecordPO> analysisRecords = recordService.list(Wrappers.lambdaQuery(StudentAssessmentRecordPO.class)
                 .eq(StudentAssessmentRecordPO::getState, 2)
-                .eq(StudentAssessmentRecordPO::getReAnalysis, false));
+                .and(wrapper -> wrapper
+                        .eq(StudentAssessmentRecordPO::getReAnalysis, false)
+                        .or()
+                        .lt(StudentAssessmentRecordPO::getUpdateTime, LocalDateTime.now().minusMinutes(6))));
         if (CollectionUtils.isEmpty(analysisRecords)) {
             log.info("没有需要分析的考核");
             return;
@@ -313,6 +322,7 @@ public class StudentAssessmentService {
                     try {
                         recordService.update(Wrappers.lambdaUpdate(StudentAssessmentRecordPO.class)
                                 .set(StudentAssessmentRecordPO::getReAnalysis, true)
+                                .set(StudentAssessmentRecordPO::getUpdateTime, LocalDateTime.now())
                                 .eq(StudentAssessmentRecordPO::getId, record.getId()));
                         endAssessment(studentId, setting, questionAnswers, assessmentId);
                     } catch (Exception e) {
@@ -324,6 +334,45 @@ public class StudentAssessmentService {
                 });
             }
         }
+    }
+
+    /**
+     * FIX-E: 手动重新分析单条考核记录（救评分卡死 / 重新生成评分）。
+     * 仅允许对已完成(state=1)或分析中/失败(state=2)、且当前未在分析的记录触发；异步执行，立即返回。
+     */
+    public Boolean reanalyze(Integer recordId) {
+        StudentAssessmentRecordPO record = recordService.getById(recordId);
+        if (record == null) {
+            throw new BusinessException(ErrorCodeEnums.RECORD_NOT_FOUND);
+        }
+        Integer state = record.getState();
+        if (state == null || (state != 1 && state != 2)) {
+            throw new BusinessException(132, "该考核记录当前状态不支持重新分析");
+        }
+        if (Objects.equals(record.getReAnalysis(), true)) {
+            throw new BusinessException(132, "该记录正在分析中，请稍后再试");
+        }
+        Integer studentId = record.getStudentId();
+        Integer assessmentId = record.getAssessmentId();
+        AssessmentSettingPO setting = settingService.findById(assessmentId)
+                .orElseThrow(() -> new BusinessException(ErrorCodeEnums.ASSESSMENT_SETTING_NOT_FOUND));
+        List<StudentAssessmentQuestionAnswerPO> questionAnswers =
+                questionAnswerService.listByAssessmentIdAndStudentId(assessmentId, studentId);
+        threadPoolExecutor.execute(() -> {
+            try {
+                recordService.update(Wrappers.lambdaUpdate(StudentAssessmentRecordPO.class)
+                        .set(StudentAssessmentRecordPO::getReAnalysis, true)
+                        .set(StudentAssessmentRecordPO::getUpdateTime, LocalDateTime.now())
+                        .eq(StudentAssessmentRecordPO::getId, recordId));
+                endAssessment(studentId, setting, questionAnswers, assessmentId);
+            } catch (Exception e) {
+                log.error("手动重新分析失败, recordId:{}", recordId, e);
+                recordService.update(Wrappers.lambdaUpdate(StudentAssessmentRecordPO.class)
+                        .set(StudentAssessmentRecordPO::getReAnalysis, false)
+                        .eq(StudentAssessmentRecordPO::getId, recordId));
+            }
+        });
+        return true;
     }
 
     @Transactional(readOnly = true)
@@ -339,7 +388,7 @@ public class StudentAssessmentService {
                 .all(relations.size())
                 .toAppoint(studentSummary.toAppointAssessmentIds(this::noNeedAppointAssessmentIds, this::timeExpireAppointmentIds).size())
                 .todo(studentSummary.todoAssessmentIds(this::noNeedAppointAssessmentIds).size())
-                .analysis((int) studentSummary.getRecords().stream().filter(record -> record.getState() == 2).count())
+                .analysis((int) studentSummary.getRecords().stream().filter(record -> Objects.equals(record.getState(), 2)).count())
                 .done(studentSummary.doneAssessmentIds(this::timeExpireAppointmentIds).size())
                 .build();
     }
@@ -539,7 +588,10 @@ public class StudentAssessmentService {
 
     private Map<Integer, LinkedHashMap<LocalDateTime, Long>> assessmentTimeCountMap(List<Integer> assessmentIds) {
         return studentAppointmentService.list(Wrappers.lambdaQuery(StudentAssessmentAppointmentPO.class)
-                        .in(StudentAssessmentAppointmentPO::getAssessmentId, assessmentIds))
+                        .in(StudentAssessmentAppointmentPO::getAssessmentId, assessmentIds)
+                        .and(query -> query.in(StudentAssessmentAppointmentPO::getState, APPOINTMENT_CONFIRMED, APPOINTMENT_IN_ASSESSMENT)
+                                .or()
+                                .isNull(StudentAssessmentAppointmentPO::getState)))
                 .stream()
                 .collect(Collectors.groupingBy(
                         StudentAssessmentAppointmentPO::getAssessmentId,
@@ -692,7 +744,7 @@ public class StudentAssessmentService {
         int state;
         String stateTag = "";
         // 能在已完成的记录，都是已经通过的
-        if (record != null && record.getState() == 1) {
+        if (record != null && Objects.equals(record.getState(), 1)) {
             state = 2;
         }
         // 如果有预约的，则返回预约的状态
@@ -875,7 +927,15 @@ public class StudentAssessmentService {
                 String mapKey = studentId + ":" + assessmentId;
                 cacheLiveQuestions(mapKey, studentId, assessmentId, liveQuestions);
                 log.info("现场题目生成完成, studentId:{}, assessmentId:{}, count:{}", studentId, assessmentId, liveQuestions.size());
-                WebsocketManager.sendTextMessage(studentId, WebSocketResponse.of("题目生成完成，请点击获取题目"));
+                // FIX-F: 题目生成完成后直接推送第 1 题（纯文本推送，避免与 TTS 播放器竞态），
+                // 不再让学生手动点击「获取题目」。前端 QuestionPage 已停止在 start-assessment 后自动请求。
+                if (CollectionUtils.isNotEmpty(liveQuestions)) {
+                    GeneratedQuestionDTO firstQuestion = new GeneratedQuestionDTO();
+                    firstQuestion.setQuestion(liveQuestions.get(0).getQuestion());
+                    firstQuestion.setFollow(false);
+                    sendQuestionTextToStudent(firstQuestion, studentId, assessmentId, 1, setting.getQuestionCount(),
+                            response -> WebsocketManager.sendTextMessage(studentId, response));
+                }
             } catch (Exception e) {
                 log.error("现场题目生成失败, studentId:{}, assessmentId:{}", studentId, assessmentId, e);
                 WebsocketManager.sendTextMessage(studentId, WebSocketResponse.of("题目生成失败，请重试"));
@@ -1658,7 +1718,8 @@ public class StudentAssessmentService {
                 .eq(StudentAssessmentAppointmentPO::getStudentId, studentId)
                 .eq(StudentAssessmentAppointmentPO::getAssessmentId, assessmentSettingPO.getId()));
         if (studentExistAppoint != null) {
-            if (Objects.equals(studentExistAppoint.getState(), 3)) {
+            if (Objects.equals(studentExistAppoint.getState(), APPOINTMENT_MISSED)
+                    && Objects.equals(assessmentSettingPO.getAssessmentFailPunish(), true)) {
                 LocalDateTime rescheduleAppointTime = assessmentSettingPO.getRescheduleAppointTime();
                 if (rescheduleAppointTime == null) {
                     throw new BusinessException(ErrorCodeEnums.UNABLE_APPOINT);
@@ -1668,9 +1729,16 @@ public class StudentAssessmentService {
                 }
             }
         }
-        long appointmentCount = studentAppointmentService.count(Wrappers.lambdaQuery(StudentAssessmentAppointmentPO.class)
+        LambdaQueryWrapper<StudentAssessmentAppointmentPO> countWrapper = Wrappers.lambdaQuery(StudentAssessmentAppointmentPO.class)
                 .eq(StudentAssessmentAppointmentPO::getAssessmentId, assessmentSettingPO.getId())
-                .eq(StudentAssessmentAppointmentPO::getTimePeriod, timePeriod));
+                .eq(StudentAssessmentAppointmentPO::getTimePeriod, timePeriod)
+                .and(query -> query.in(StudentAssessmentAppointmentPO::getState, APPOINTMENT_CONFIRMED, APPOINTMENT_IN_ASSESSMENT)
+                        .or()
+                        .isNull(StudentAssessmentAppointmentPO::getState));
+        if (studentExistAppoint != null && studentExistAppoint.getId() != null) {
+            countWrapper.ne(StudentAssessmentAppointmentPO::getId, studentExistAppoint.getId());
+        }
+        long appointmentCount = studentAppointmentService.count(countWrapper);
         // 统计是否已经预约满了
         if (appointmentCount >= appointmentSettingPO.getParticipantLimit()) {
             throw new BusinessException(ErrorCodeEnums.ASSESSMENT_SETTING_APPOINTMENT_LIMIT_EXCEED);
@@ -1678,12 +1746,13 @@ public class StudentAssessmentService {
 
         // 判断是否已经预约
         if (studentExistAppoint != null) {
-            if (!Objects.equals(studentExistAppoint.getState(), 2) && !Objects.equals(studentExistAppoint.getState(), 4) && !Objects.equals(studentExistAppoint.getState(), 3)) {
+            if (!Objects.equals(studentExistAppoint.getState(), 2) && !Objects.equals(studentExistAppoint.getState(), 4) && !Objects.equals(studentExistAppoint.getState(), APPOINTMENT_MISSED)) {
                 throw new BusinessException(ErrorCodeEnums.ASSESSMENT_SETTING_APPOINTMENT_EXIST);
             }
-            studentExistAppoint.setState(0);
+            studentExistAppoint.setAppointmentTime(LocalDateTime.now());
+            studentExistAppoint.setState(APPOINTMENT_CONFIRMED);
             studentExistAppoint.setPunishState(-1);
-            studentExistAppoint.setTimePeriod(appointmentCmd.getTimePeriod());
+            studentExistAppoint.setTimePeriod(timePeriod);
             studentAppointmentService.updateById(studentExistAppoint);
             return true;
         }
@@ -1693,6 +1762,8 @@ public class StudentAssessmentService {
         assessmentAppointmentPO.setStudentId(studentId);
         assessmentAppointmentPO.setAssessmentId(appointmentCmd.getAssessmentId());
         assessmentAppointmentPO.setTimePeriod(timePeriod);
+        assessmentAppointmentPO.setState(APPOINTMENT_CONFIRMED);
+        assessmentAppointmentPO.setPunishState(-1);
         return studentAppointmentService.save(assessmentAppointmentPO);
     }
 

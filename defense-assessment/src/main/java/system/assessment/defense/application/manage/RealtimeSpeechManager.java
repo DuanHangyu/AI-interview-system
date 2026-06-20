@@ -148,6 +148,7 @@ public class RealtimeSpeechManager {
         if (session == null || !session.isOpen()) {
             return Optional.empty();
         }
+        session.resetTranscriptFuture();
         session.send(eventFactory.inputAudioCommit());
         try {
             String transcript = session.transcriptFuture.get(transcriptWaitMs, TimeUnit.MILLISECONDS);
@@ -178,6 +179,7 @@ public class RealtimeSpeechManager {
             return Optional.empty();
         }
 
+        session.resetTranscriptFuture();
         session.send(eventFactory.inputAudioCommit());
         String inputTranscript = "";
         try {
@@ -324,6 +326,16 @@ public class RealtimeSpeechManager {
             }
             responseTranscriptNotified.set(false);
             hasResponseAudio.set(false);
+        }
+
+        /**
+         * 为新一轮 input_audio_buffer.commit 重置输入转写 future。
+         * 修复追问轮次复用上一轮已 complete 的 transcriptFuture（恒得空串、强制退回离线 ASR）的问题。
+         * 不动 responseFuture（由 startAssistantResponse 自行管理）。
+         */
+        private synchronized void resetTranscriptFuture() {
+            transcriptFuture = new CompletableFuture<>();
+            inputTranscript = "";
         }
 
         private boolean send(String eventJson) {

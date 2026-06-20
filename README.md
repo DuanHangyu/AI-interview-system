@@ -154,9 +154,20 @@ DASHSCOPE_API_KEY='<your-dashscope-api-key>'
 DASHSCOPE_REALTIME_MODEL='qwen3.5-omni-flash-realtime'
 DASHSCOPE_REALTIME_VOICE='Ethan'
 
-DB_JDBC_URL='jdbc:mysql://127.0.0.1:3306/defense_test?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=GMT%2B8&allowMultiQueries=true'
+DB_JDBC_URL='jdbc:mysql://127.0.0.1:13307/defense_test?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=GMT%2B8&allowMultiQueries=true'
 DB_USERNAME='<your-db-user>'
 DB_PASSWORD='<your-db-password>'
+
+DB_TUNNEL_ENABLED='true'
+DB_TUNNEL_WATCH='true'
+DB_TUNNEL_CHECK_INTERVAL='5'
+DB_TUNNEL_LOCAL_HOST='127.0.0.1'
+DB_TUNNEL_LOCAL_PORT='13307'
+DB_TUNNEL_REMOTE_HOST='127.0.0.1'
+DB_TUNNEL_REMOTE_PORT='3306'
+DB_TUNNEL_SSH_HOST='<your-server-host>'
+DB_TUNNEL_SSH_USER='<your-server-user>'
+DB_TUNNEL_SSH_PASSWORD='<your-server-password>'
 
 JETCACHE_REDIS_URI='redis://127.0.0.1:6379/0'
 REDIS_PASSWORD=''
@@ -226,7 +237,7 @@ http://localhost:3004
 ./scripts/restart-local.sh
 ```
 
-脚本会读取根目录 `.env.local`，并启动前端与后端服务。
+脚本会读取根目录 `.env.local`，并启动前端与后端服务。不要直接在 `defense-assessment` 目录里手动运行 `./mvnw spring-boot:run`，除非已经显式加载 `.env.local`；否则后端可能缺少 `DB_PASSWORD` 等环境变量，表现为端口可用但登录接口返回数据库连接失败。
 
 ## 配置说明
 
@@ -253,10 +264,12 @@ http://localhost:3004
 | `DB_USERNAME` | 数据库用户名 |
 | `DB_PASSWORD` | 数据库密码 |
 
-本地开发如果需要通过 SSH Tunnel 访问远程 MySQL，可启用以下配置：
+本地开发如果需要通过 SSH Tunnel 访问远程 MySQL，可启用以下配置。当前本地开发推荐让 `DB_JDBC_URL` 指向 `127.0.0.1:13307`，由脚本负责把该端口转发到服务器 MySQL：
 
 ```bash
 DB_TUNNEL_ENABLED='true'
+DB_TUNNEL_WATCH='true'
+DB_TUNNEL_CHECK_INTERVAL='5'
 DB_TUNNEL_LOCAL_HOST='127.0.0.1'
 DB_TUNNEL_LOCAL_PORT='13307'
 DB_TUNNEL_REMOTE_HOST='127.0.0.1'
@@ -267,6 +280,8 @@ DB_TUNNEL_SSH_PASSWORD='<your-server-password>'
 ```
 
 生产部署不建议依赖本地 SSH Tunnel。推荐将后端部署到与 MySQL 相同的私有网络，使用内网地址连接数据库。
+
+本地 `local` profile 会要求 `DB_USERNAME` 和 `DB_PASSWORD` 必须存在；如果缺失，后端应当启动失败，而不是等到登录页才抛数据库连接错误。
 
 ### Redis
 

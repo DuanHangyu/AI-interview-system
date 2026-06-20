@@ -22,6 +22,16 @@ import java.util.stream.Collectors;
 @Schema(description = "用户信息")
 public class StudentSummary {
 
+    private static final int ASSESSMENT_IN_PROCESSING = 0;
+    private static final int ASSESSMENT_DONE = 1;
+    private static final int ASSESSMENT_ANALYZING = 2;
+    private static final int ASSESSMENT_RETAKE = 3;
+
+    private static final int APPOINTMENT_CONFIRMED = 0;
+    private static final int APPOINTMENT_IN_ASSESSMENT = 1;
+    private static final int APPOINTMENT_DONE = 2;
+    private static final int APPOINTMENT_MISSED = 3;
+
     private Integer id;
 
     private List<StudentAssessmentRecordPO> records;
@@ -40,12 +50,12 @@ public class StudentSummary {
 
         // 获取状态为0或1的预约中的评估ID列表
         Set<Integer> todoAppointAssessmentIds = appointments.stream()
-                .filter(item -> item.getState() == 0 || item.getState() == 1)
+                .filter(StudentSummary::isActiveAppointment)
                 .map(StudentAssessmentAppointmentPO::getAssessmentId)
                 .collect(Collectors.toSet());
         // 加上重考的
         todoAppointAssessmentIds.addAll(records.stream()
-                .filter(item -> Objects.equals(item.getState(), 3))
+                .filter(item -> Objects.equals(item.getState(), ASSESSMENT_RETAKE))
                 .map(StudentAssessmentRecordPO::getAssessmentId)
                 .toList());
 
@@ -54,7 +64,7 @@ public class StudentSummary {
         relationAssessmentIds.removeIf(todoAppointAssessmentIds::contains);
         // 已经考核完成或在分析中的剔除
         Set<Integer> recordAssessmentIds = records.stream()
-                .filter(item -> Objects.equals(item.getState(), 1) || Objects.equals(item.getState(), 2))
+                .filter(item -> Objects.equals(item.getState(), ASSESSMENT_DONE) || Objects.equals(item.getState(), ASSESSMENT_ANALYZING))
                 .map(StudentAssessmentRecordPO::getAssessmentId).collect(Collectors.toSet());
         relationAssessmentIds.removeIf(recordAssessmentIds::contains);
         if (CollectionUtils.isNotEmpty(relationAssessmentIds)) {
@@ -70,8 +80,9 @@ public class StudentSummary {
         List<Integer> relationAssessmentIds = new ArrayList<>(relations.stream()
                 .map(AssessmentStudentRelationPO::getAssessmentId)
                 .toList());
-        // 已经预约的剔除
+        // 已经处于有效预约/考核完成的剔除，可重新预约的历史记录不应挡住新的预约入口
         Set<Integer> appointAssessmentIds = appointments.stream()
+                .filter(StudentSummary::blocksNewAppointment)
                 .map(StudentAssessmentAppointmentPO::getAssessmentId)
                 .collect(Collectors.toSet());
         relationAssessmentIds.removeIf(appointAssessmentIds::contains);
@@ -94,27 +105,19 @@ public class StudentSummary {
     }
 
     /**
-     * 已完成的包含考核完成的，预约未考核的，解除惩罚的，绑定了该考核，但是没预约，没考核的
+     * 已完成的包含考核完成的、预约未考核的、绑定了该考核但是已过预约期且未考核的
      * @param timeExpireAppointmentFunction 查询过期的考核id集合
      * @return 可显示的考核ID列表
      */
     public List<Integer> doneAssessmentIds(Function<List<Integer> , List<Integer>> timeExpireAppointmentFunction) {
-        // 定义状态常量，提高可读性
-        final int ASSESSMENT_IN_PROCESSING = 0;          // 考核未开始状态
-        final int ASSESSMENT_DONE = 1;                // 考核完成状态
-        final int ASSESSMENT_ANALYZING = 2;           // 分析中状态
-        final int APPOINTMENT_CANCELLED = 3;          // 预约未考状态
-        final int APPOINTMENT_EXPIRED = 4;            // 可重新预约状态
-        final int APPOINTMENT_CONFIRMED = 0;          // 已确认预约状态
-
         // 已经考核的
         Set<Integer> doneAssessmentIds = records.stream()
                 .filter(item -> Objects.equals(item.getState(), ASSESSMENT_DONE))
                 .map(StudentAssessmentRecordPO::getAssessmentId).collect(Collectors.toSet());
 
-        // 预约取消或过期的
+        // 预约未考的留在已结束中展示惩罚状态；已解除惩罚的应回到待预约中
         Set<Integer> appointButNotAssessIds = appointments.stream()
-                .filter(item -> item.getState() == APPOINTMENT_CANCELLED || item.getState() == APPOINTMENT_EXPIRED)
+                .filter(item -> Objects.equals(item.getState(), APPOINTMENT_MISSED))
                 .map(StudentAssessmentAppointmentPO::getAssessmentId)
                 .collect(Collectors.toSet());
         doneAssessmentIds.addAll(appointButNotAssessIds);
@@ -126,14 +129,14 @@ public class StudentSummary {
 
         // 预约了但还没考核的
         Set<Integer> appointNotAssessIds = appointments.stream()
-                .filter(item -> item.getState() == APPOINTMENT_CONFIRMED)
+                .filter(StudentSummary::isActiveAppointment)
                 .map(StudentAssessmentAppointmentPO::getAssessmentId)
                 .collect(Collectors.toSet());
         relationAssessmentIds.removeIf(appointNotAssessIds::contains);
 
         // 分析中的，考核未开始，考核重考
         Set<Integer> analysisAssessIds = records.stream()
-                .filter(item -> Objects.equals(item.getState(), ASSESSMENT_ANALYZING) || Objects.equals(item.getState(), ASSESSMENT_IN_PROCESSING) || Objects.equals(item.getState(), 3))
+                .filter(item -> Objects.equals(item.getState(), ASSESSMENT_ANALYZING) || Objects.equals(item.getState(), ASSESSMENT_IN_PROCESSING) || Objects.equals(item.getState(), ASSESSMENT_RETAKE))
                 .map(StudentAssessmentRecordPO::getAssessmentId)
                 .collect(Collectors.toSet());
         relationAssessmentIds.removeIf(analysisAssessIds::contains);
@@ -145,5 +148,19 @@ public class StudentSummary {
         }
 
         return new ArrayList<>(doneAssessmentIds);
+    }
+
+    private static boolean isActiveAppointment(StudentAssessmentAppointmentPO item) {
+        Integer state = item.getState();
+        return state == null || Objects.equals(state, APPOINTMENT_CONFIRMED) || Objects.equals(state, APPOINTMENT_IN_ASSESSMENT);
+    }
+
+    private static boolean blocksNewAppointment(StudentAssessmentAppointmentPO item) {
+        Integer state = item.getState();
+        return state == null
+                || Objects.equals(state, APPOINTMENT_CONFIRMED)
+                || Objects.equals(state, APPOINTMENT_IN_ASSESSMENT)
+                || Objects.equals(state, APPOINTMENT_DONE)
+                || Objects.equals(state, APPOINTMENT_MISSED);
     }
 }

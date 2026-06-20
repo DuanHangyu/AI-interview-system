@@ -58,4 +58,10 @@ public class StudyRecordController {
     public Boolean retake(@RequestBody RecordRetakeCmd retakeCmd){
         return studyRecordService.retake(retakeCmd);
     }
+
+    @PostMapping("/reanalyze")
+    @Operation(summary = "重新分析考核（重新生成评分，救评分卡死）")
+    public Boolean reanalyze(@RequestBody RecordRetakeCmd reanalyzeCmd){
+        return studentAssessmentService.reanalyze(reanalyzeCmd.getRecordId());
+    }
 }

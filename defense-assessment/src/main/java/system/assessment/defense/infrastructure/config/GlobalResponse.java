@@ -20,7 +20,16 @@ import java.util.Set;
 @RestControllerAdvice
 public class GlobalResponse implements ResponseBodyAdvice<Object> {
 
-    private static final Set<String> excludePath = Set.of("/v3/api-docs","/gemini/generate-voice");
+    // Binary-stream endpoints write directly to the response output and must not
+    // be wrapped as {code,message,data} JSON (otherwise the committed stream throws).
+    private static final Set<String> excludePath = Set.of(
+            "/v3/api-docs",
+            "/gemini/generate-voice",
+            "/file/preview",
+            "/backend/student/export-template",
+            "/backend/student/export",
+            "/backend/study-record/export-record"
+    );
 
     @Override
     public boolean supports(MethodParameter returnType, Class<? extends HttpMessageConverter<?>> converterType) {
