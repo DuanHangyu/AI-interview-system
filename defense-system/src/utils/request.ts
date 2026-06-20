@@ -119,7 +119,7 @@ service.interceptors.response.use(
       return Promise.reject(new Error(msg));
     } else if (code !== 200) {
       notification.error({ message: msg });
-      return Promise.reject("error");
+      return Promise.reject(new Error(msg));
     } else {
       return Promise.resolve(res.data);
     }

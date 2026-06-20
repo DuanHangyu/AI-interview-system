@@ -110,6 +110,7 @@
               type="primary"
               :loading="loading"
               :disabled="!data.account || !data.password"
+              @click="submitLogin"
               block
             >
               <span>登录</span>
@@ -162,6 +163,9 @@ const submitLogin = () => {
     ?.login(data.value)
     .then(() => {
       router.replace((route.query.redirect as string) || "/");
+    })
+    .catch(() => {
+      // Request interceptor owns the visible error notification.
     })
     .finally(() => {
       loading.value = false;
