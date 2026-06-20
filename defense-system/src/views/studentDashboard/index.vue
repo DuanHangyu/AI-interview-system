@@ -22,7 +22,7 @@
             <BellOutlined />
             <span class="notice-dot" v-if="unreadNoticeCount">{{ unreadNoticeCount }}</span>
           </button>
-          <Dropdown placement="bottomRight" trigger="click" :arrow="false">
+          <Dropdown placement="bottomRight" :trigger="['click']" :arrow="false">
             <button class="user-chip" type="button">
               <span>{{ studentInitial }}</span>
               <strong>{{ studentName }}</strong>
@@ -966,14 +966,23 @@ const handleSideNav = (key: string) => {
   }
   if (key === "assessment") {
     changeTab(2);
+    if (!tabCount(2)) {
+      message.info("当前没有待完成考核");
+    }
     return;
   }
   if (key === "report") {
     changeTab(4);
+    if (!tabCount(4)) {
+      message.info("暂无可查看报告");
+    }
     return;
   }
   if (key === "schedule") {
     changeTab(1);
+    if (!tabCount(1)) {
+      message.info("当前没有待预约考核");
+    }
     return;
   }
   if (key === "device") {
