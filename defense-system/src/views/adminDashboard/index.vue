@@ -119,11 +119,6 @@ const columns = [
     key: "account",
   },
   {
-    title: "登录密码",
-    key: "password",
-    dataIndex: "password",
-  },
-  {
     title: "教师手机号",
     dataIndex: "phone",
     key: "phone",
