@@ -38,10 +38,6 @@ public class AssessmentSettingsCreateCmd {
     @Schema(description = "考核题目数量")
     private Integer questionCount;
 
-    @Schema(description = "考核思考时间")
-    @NotNull(message = "考核思考时间不能为空")
-    private Integer thinkingTime;
-
     @Schema(description = "考核答题时间")
     @NotNull(message = "考核答题时间不能为空")
     private Integer answerTime;

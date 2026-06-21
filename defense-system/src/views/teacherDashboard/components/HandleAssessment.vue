@@ -65,39 +65,6 @@
           placeholder="请输入"
         />
       </FormItem>
-      <!-- <div
-        class="flex items-center space-x-3"
-        v-if="formState?.defense && formState?.question"
-      >
-        <FormItem
-          label="答辩分数占比"
-          name="defenseProportion"
-          :rules="[{ required: true, message: '该项为必填项' }]"
-        >
-          <InputNumber
-            class="w-full"
-            :min="0"
-            :precision="0"
-            v-model:value="formState.defenseProportion"
-            placeholder="请输入"
-            addon-after="%"
-          />
-        </FormItem>
-        <FormItem
-          label="提问分数占比"
-          name="questionProportion"
-          :rules="[{ required: true, message: '该项为必填项' }]"
-        >
-          <InputNumber
-            class="w-full"
-            :min="0"
-            :precision="0"
-            v-model:value="formState.questionProportion"
-            placeholder="请输入"
-            addon-after="%"
-          />
-        </FormItem>
-      </div> -->
       <FormItem
         label="及格分"
         name="passScore"
@@ -214,20 +181,6 @@
           placeholder="请输入"
         />
       </FormItem> -->
-      <!-- <FormItem
-        label="追问概率（0.0-1.0）"
-        name="followUpProbability"
-        :rules="[{ required: true, message: '该项为必填项' }]"
-      >
-        <InputNumber
-          class="w-full"
-          :min="0"
-          :max="1"
-          :precision="1"
-          v-model:value="formState.followUpProbability"
-          placeholder="请输入"
-        />
-      </FormItem> -->
       <FormItem
         label="是否显示结果"
         name="showResult"
@@ -242,7 +195,7 @@
       <FormItem
         label="考核文件"
         name="assessmentFiles"
-        :rules="[{ required: true, message: '该项为必填项' }]"
+        :rules="[]"
       >
         <UploadDragger
           name="file"
@@ -513,7 +466,6 @@ defineExpose({
       questionCount: undefined,
       answerTime: undefined,
       followUp: false,
-      // followUpProbability: undefined,
       totalScore: undefined,
       passScore: undefined,
       defense: false,
@@ -528,8 +480,6 @@ defineExpose({
       classAndStudent: [],
       inviteTeachers: [],
       needAppoint: true,
-      // defenseProportion: undefined,
-      // questionProportion: undefined,
     };
     Object.assign(formState.value, e as any);
     if (e?.participatingStudents?.length) {
