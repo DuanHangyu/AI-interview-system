@@ -2,173 +2,192 @@
 
 ## Purpose
 
-This file captures the visual style extracted from the provided B-side dashboard reference image. Use it as the design direction when migrating the style into the AI Interview System.
+This document extracts the visual language from the supplied reference images:
 
-The target feel is a calm, premium, minimal B-end product interface: grayscale spatial background, soft glass panels, compact navigation, crisp typography, and a small warm accent for action and status.
+- `/Users/duanhangyu/Downloads/20260112_695de0f5000000000e00cf13.png`
+- `/Users/duanhangyu/Downloads/20260112_695de0f5000000000e00cf13 (1).png`
 
-## Student Dashboard Addendum
+Use this as the design source of truth for the next student-side and teacher-side
+UI refresh of the AI Interview System. This is not a login-page direction. It is
+for post-login dashboards, assessment workflow pages, student progress pages,
+teacher management pages, records, schedules, and report surfaces.
 
-The latest student reference image defines the student-facing home/dashboard after login. It shifts the student workspace toward a warmer, friendlier B-end dashboard: soft cream panels, pale yellow glow, rounded modular widgets, black text, and charcoal cards only where focus is needed. Use this addendum primarily for the student landing dashboard, task list, appointments, results entry, and report entry points. Live interview pages should only inherit the palette and light status accents unless a separate redesign is requested.
+The target style is a bright education-SaaS dashboard: light blue workspace,
+white modular cards, compact left navigation, blue step progress, soft data
+widgets, and dense but friendly operational panels.
 
-### Student Dashboard Keywords
+## Design DNA
 
-- Warm minimal B-end
-- Cream glass dashboard
-- Soft yellow task lighting
-- Rounded modular widgets
-- Human-centered student workspace
-- Light task board with one dark progress card
-- Friendly but still operational
-- Calm assessment preparation
+- Light education SaaS
+- Blue learning platform
+- Clean B-side dashboard
+- Rounded white app shell
+- Compact left sidebar
+- Step-based workflow navigation
+- Soft blue content zones
+- Card-based task and data modules
+- Friendly data visualization
+- Operational but approachable
 
-### Student Dashboard Mood
+The product should feel like a polished education/workforce platform rather
+than a heavy admin console. It should remain efficient and repeatable for daily
+use, but the tone should be lighter, clearer, and more supportive than the
+current dark/cream student dashboard.
 
-The student should feel they are entering a guided assessment workspace, not a generic portal. The UI should feel calm, prepared, and organized. The student dashboard should communicate:
+## Core Principles
 
-- which assessments are waiting
-- what the student should do next
-- whether the task can be started now
-- how appointment, analysis, and result states progress
+### 1. App Shell Over Page Decoration
 
-Use the warm design for the student dashboard shell while preserving B-end clarity. Avoid gamified, colorful, or decorative student-card visuals. For live interview and question pages, keep the existing operational layout and only borrow the warm gray/yellow/coral palette.
+The reference images present the app as a large white rounded product shell on a
+very pale background. The shell contains the sidebar and content, while the page
+background stays quiet.
 
-### Student Dashboard Palette
+Apply this to the AI Interview System:
+
+- Use one main app frame for student and teacher dashboards.
+- Keep the frame white with subtle shadow and 18-24px outer radius.
+- Use light gray-blue page background outside the frame.
+- Optional dotted background is allowed outside the app frame only.
+- Do not scatter decorative elements inside operational content.
+
+### 2. Left Navigation Is Slim And Functional
+
+The sidebar is narrow, white, and grouped. It uses small icons, compact labels,
+and a strong blue active state.
+
+Apply this to:
+
+- student dashboard navigation
+- teacher dashboard navigation
+- records/settings/report side menus
+
+Sidebar structure:
+
+- product logo block
+- user identity block
+- grouped menu sections
+- active nav item in bright blue
+- bottom resources/help section
+
+Avoid full-height charcoal sidebars for this design direction.
+
+### 3. Blue Journey Bar As Page Context
+
+The reference uses a top horizontal stepper with arrow-like segments. It gives
+the page a sense of progression and makes the dashboard feel guided.
+
+For this project, use step bars for workflows such as:
+
+- student assessment lifecycle: `预约考核 -> 设备检测 -> 正式面试 -> 报告复盘`
+- teacher assessment setup: `基础信息 -> 规则配置 -> 学生安排 -> 发布确认`
+- record review: `筛选记录 -> 查看详情 -> 核分确认 -> 导出报告`
+
+Active steps use a saturated blue gradient. Inactive steps use pale gray-blue.
+
+### 4. Dashboard Cards Are Soft But Data-Dense
+
+The visual language is card-based, but not empty. Each card has a clear job:
+task, schedule, progress, rank, quick entry, profile, or form section.
+
+Use cards for:
+
+- upcoming assessments
+- to-do items
+- quick actions
+- progress rings
+- score summaries
+- ranking / comparison blocks
+- report status
+- student profile
+- teacher workload
+- assessment setup sections
+
+Do not use oversized hero banners. Every visible module should answer a useful
+operational question.
+
+### 5. Friendly Data Visualization
+
+The references use progress rings, small rank cards, compact calendars, and
+timeline rows. Data should feel motivating, not intimidating.
+
+Use:
+
+- blue circular progress rings
+- blue/green progress bars
+- small amber highlights for ranking or warning
+- compact calendar blocks for appointments
+- vertical timeline rows for daily tasks or assessment events
+- small badges for status and counts
+
+Avoid dense chart libraries unless needed. Prefer simple native UI widgets.
+
+## Visual System
+
+### Color Tokens
 
 ```css
 :root {
-  --student-page-bg: #aaa9a6;
-  --student-panel: rgba(248, 248, 240, 0.9);
-  --student-panel-soft: rgba(255, 255, 247, 0.74);
-  --student-cream: #f7f3df;
-  --student-cream-deep: #efe8bd;
-  --student-yellow: #f4cf55;
-  --student-yellow-soft: rgba(244, 207, 85, 0.28);
-  --student-charcoal: #2f302f;
-  --student-charcoal-soft: #444540;
-  --student-text: #17181a;
-  --student-muted: #6c6e68;
-  --student-border: rgba(255, 255, 255, 0.72);
-  --student-line: rgba(23, 24, 26, 0.08);
-  --student-success: #86a95f;
-  --student-danger: #e75f49;
+  --page-bg: #f3f7fc;
+  --page-dot: rgba(207, 218, 235, 0.42);
+
+  --shell-bg: #ffffff;
+  --shell-border: #e8f0fb;
+  --section-bg: #f4f9ff;
+  --section-blue: #eaf4ff;
+  --section-blue-strong: #dcecff;
+
+  --card-bg: #ffffff;
+  --card-tint: #f8fbff;
+  --card-border: #e3edf9;
+
+  --primary: #1597ff;
+  --primary-deep: #0078e7;
+  --primary-soft: #dff0ff;
+  --primary-glow: rgba(21, 151, 255, 0.22);
+
+  --cyan: #42c9ff;
+  --mint: #37c978;
+  --amber: #ffb33f;
+  --orange: #ff8a2a;
+
+  --text-strong: #12233d;
+  --text-main: #27364b;
+  --text-muted: #6b7c93;
+  --text-soft: #9aa9bc;
+
+  --line: #dfeaf7;
+  --line-soft: rgba(223, 234, 247, 0.72);
 }
 ```
 
 Color usage:
 
-- Use warm gray for the page background, not pure white.
-- Main student board uses translucent cream/off-white.
-- Use pale yellow for progress, active time, and ready status.
-- Use coral only for destructive, urgent, or final primary actions.
-- Use one dark charcoal card for task progress or status grouping.
-- Keep blue/purple out of the student dashboard unless an existing asset forces it.
+- Primary actions, active nav, and active stepper: `--primary`.
+- Page and large sections: light blue-gray, not pure gray.
+- Success/readiness: mint green.
+- Ranking/attention/warning: amber or orange.
+- Text: navy-charcoal, not pure black.
+- Keep purple and heavy dark palettes out of the student/teacher dashboards.
 
-### Student Dashboard Layout
+### Background
 
-The student dashboard should be a single rounded workspace board, inspired by the reference image:
-
-- Top: existing student header, then compact pill tabs for assessment state.
-- Main board: cream glass slab with 28-36px radius.
-- Hero row: welcome copy, progress strip, and compact metrics.
-- Left column: student profile / current module summary.
-- Center: assessment task cards with appointment/start/result actions.
-- Right: dark task progress card showing the state flow.
-
-Recommended desktop structure:
+Use a pale blue-gray background with optional very subtle dot pattern:
 
 ```css
-.student-dashboard {
-  min-height: 100vh;
-  padding: 24px;
+.page-bg {
   background:
-    radial-gradient(circle at 82% 22%, rgba(244, 207, 85, 0.34), transparent 30%),
-    linear-gradient(180deg, #b6b5b1 0%, #8c8b87 100%);
-}
-
-.student-home-board {
-  max-width: 1450px;
-  margin: 0 auto;
-  padding: 22px;
-  border-radius: 34px;
-  background: var(--student-panel);
-  border: 1px solid var(--student-border);
-  box-shadow: 0 28px 90px rgba(30, 31, 29, 0.22);
-}
-
-.student-dashboard-grid {
-  display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 280px;
-  gap: 14px;
+    radial-gradient(circle, var(--page-dot) 1px, transparent 1px),
+    var(--page-bg);
+  background-size: 28px 28px;
 }
 ```
 
-Responsive rules:
+The dot pattern should be barely visible. It belongs to the outer page, not to
+cards or tables.
 
-- At tablet width, stack profile, task list, and progress card vertically.
-- At mobile width, one column, cards stay full-width, and no fixed `min-width` should force horizontal scroll.
-- Text must wrap inside cards. Long task titles should not resize the card layout.
+### Typography
 
-### Student Dashboard Components
-
-#### Header
-
-Use the existing student header style, aligned with this palette:
-
-- brand pill on the left
-- status pill in the center
-- compact user pill on the right
-- off-white background with subtle border
-- no heavy black full-width navbar on the dashboard
-
-#### Welcome Card
-
-Use for the main greeting and preparation context:
-
-- large direct greeting with student name
-- short sentence explaining the current workspace
-- progress strip with active status, completion percentage, and page indicator
-- cream/off-white surface, not a standalone hero banner
-
-#### Profile Card
-
-Use for student identity and current module metadata:
-
-- warm yellow-tinted avatar area
-- charcoal avatar mark or photo
-- compact metadata rows for module, page size, and service status
-- avoid decorative student illustrations unless product-supplied
-
-#### Task Card
-
-Use for assessment items in the central list:
-
-- two-column grid on desktop, one-column on narrow screens
-- large faint sequence number
-- status pill in pale yellow
-- structured rows for time, location, score, and question settings
-- actions stay at the bottom so card height remains stable
-
-#### Progress Card
-
-Use one dark card on the right, similar to the reference onboarding card:
-
-- charcoal background
-- title: "Assessment Task" or equivalent
-- large numeric progress, e.g. `2/8`
-- checklist rows for pending, scheduled, analyzing, and finished states
-- current/complete states shown with yellow or white indicators
-- inactive states muted
-
-### Student Dashboard Typography
-
-- Main student page title: 30-42px, 700-850 weight
-- Dashboard card title: 18-25px, 700-850 weight
-- Task title: 17-20px, 700-850 weight
-- Metric value: 28-34px, 800-850 weight
-- Checklist labels: 13-14px, 700-850 weight
-- Metadata: 11-12px, 500-600 weight
-
-Use the existing stack:
+Use the existing Chinese-friendly UI stack:
 
 ```css
 font-family:
@@ -180,571 +199,432 @@ font-family:
   sans-serif;
 ```
 
-### Student Dashboard Do / Do Not
+Recommended scale:
 
-Do:
+- Page title: 24-30px, 800 weight
+- Section title: 18-22px, 750-800 weight
+- Card title: 15-17px, 700 weight
+- Body text: 13-14px, 500-600 weight
+- Metadata: 11-12px, 500 weight
+- Metric number: 28-42px, 800-850 weight
 
-- Make the post-login student workspace feel warm, structured, and ready.
-- Use one dark card to anchor progress/status.
-- Keep the primary action obvious and reachable.
-- Show assessment state and next action in dashboard widgets.
-- Keep task metadata scannable and stable.
+Text should feel crisp and compact. Avoid display-scale typography inside
+routine dashboard cards.
 
-Do not:
+### Radius And Shadow
 
-- Use the all-dark room style for the normal student dashboard.
-- Scatter many saturated colors across widgets.
-- Hide appointment/start/result actions inside low-contrast text.
-- Use decorative stars/orbits inside the product UI itself; the reference image decoration is poster-level, not app-level.
-- Let long task names, action buttons, and metadata overlap.
-
-## Design Keywords
-
-- Minimal B-end dashboard
-- Soft glassmorphism
-- Light neumorphic surfaces
-- Grayscale spatial depth
-- Compact enterprise navigation
-- Coral-orange action accent
-- Data-first but breathable
-- Premium, quiet, focused
-
-## Overall Impression
-
-The UI should feel like a polished operating console rather than a marketing page. It uses large rounded surfaces, semi-transparent white panels, soft shadows, and a restrained monochrome palette. Interaction areas are clear but not loud. The warm accent color is used sparingly to guide attention.
-
-For this project, apply the style especially to teacher/admin dashboards, assessment management, student records, evaluation reports, and interview summary pages. Do not turn operational screens into decorative landing pages. The design should remain efficient for repeated use.
-
-## Visual System
-
-### Color Palette
-
-Use grayscale as the foundation. Use coral-orange only for primary actions, active indicators, progress highlights, alerts that require attention, and important chart accents.
+Use radius to make the interface friendly, but keep operational density.
 
 ```css
 :root {
-  /* Page and surfaces */
-  --color-page-bg: #d8d8d6;
-  --color-page-bg-deep: #747573;
-  --color-surface: rgba(255, 255, 255, 0.82);
-  --color-surface-solid: #f7f7f5;
-  --color-surface-soft: rgba(255, 255, 255, 0.58);
-  --color-surface-raised: #ffffff;
+  --radius-shell: 22px;
+  --radius-section: 14px;
+  --radius-card: 8px;
+  --radius-control: 8px;
 
-  /* Text */
-  --color-text-primary: #17181a;
-  --color-text-secondary: #5d6063;
-  --color-text-muted: #8a8d90;
-  --color-text-inverse: #f8f8f6;
-
-  /* Borders and dividers */
-  --color-border-light: rgba(255, 255, 255, 0.72);
-  --color-border-subtle: rgba(24, 25, 27, 0.08);
-  --color-border-strong: rgba(24, 25, 27, 0.16);
-
-  /* Navigation */
-  --color-sidebar-bg: #303130;
-  --color-sidebar-bg-soft: #3b3c3b;
-  --color-sidebar-muted: rgba(255, 255, 255, 0.58);
-
-  /* Accent */
-  --color-accent: #e75f49;
-  --color-accent-hover: #f07157;
-  --color-accent-soft: rgba(231, 95, 73, 0.14);
-  --color-accent-glow: rgba(231, 95, 73, 0.32);
-
-  /* Status */
-  --color-success: #2f8f69;
-  --color-warning: #d89a35;
-  --color-danger: #d84a3a;
-  --color-info: #4f6f8f;
+  --shadow-shell: 0 24px 60px rgba(38, 64, 102, 0.12);
+  --shadow-card: 0 8px 22px rgba(54, 97, 150, 0.08);
+  --shadow-hover: 0 12px 30px rgba(21, 151, 255, 0.14);
 }
 ```
 
-### Color Usage Rules
+Outer shells and big section containers may use larger radii. Repeated cards and
+controls should stay closer to 8px so the UI remains mature.
 
-- Backgrounds should be neutral gray or off-white, never pure saturated color.
-- Main content panels should be translucent white or soft off-white.
-- Dark areas are reserved for the sidebar, floating CTA panels, and selected metric cards.
-- Coral-orange should cover less than 8% of any screen.
-- Avoid blue-heavy enterprise defaults unless required for semantic status.
-- Avoid strong gradients, colorful illustrations, and large decorative blobs.
+### Icon Style
 
-## Typography
+Use small line icons with filled blue square/circle backgrounds only for section
+headers and quick actions.
 
-Use a modern sans-serif stack that works for Chinese and English.
+Rules:
 
-```css
-font-family:
-  Inter,
-  "SF Pro Display",
-  "PingFang SC",
-  "Microsoft YaHei",
-  Arial,
-  sans-serif;
-```
+- Icons should be 14-18px in normal menu items.
+- Section icon chips can be 24-32px.
+- Active nav icon turns white on blue.
+- Avoid oversized decorative icons.
 
-### Type Scale
+## Layout Patterns
 
-- Page title: 36-48px, 600-700 weight, line-height 1.05-1.12
-- Section title: 18-22px, 600 weight
-- Card title: 14-16px, 600 weight
-- Body text: 13-14px, 400-500 weight
-- Metadata: 11-12px, 400 weight
-- Numeric metrics: 22-32px, 600-700 weight
+### Main App Shell
 
-### Typography Rules
-
-- Use strong black text for primary meaning.
-- Keep secondary text quiet and gray.
-- Avoid oversized typography inside compact dashboards.
-- Use numbers as visual anchors in metric cards.
-- Chinese labels should be concise. Prefer 2-6 characters for navigation and tabs.
-
-## Layout
-
-### Page Structure
-
-Desktop dashboard pages should use a staged layout:
-
-- A full-viewport gray background.
-- A compact dark sidebar on the left.
-- A large rounded main workspace panel.
-- Inner cards arranged in a clean dashboard grid.
-
-Recommended shell:
+Desktop structure:
 
 ```css
 .app-shell {
-  min-height: 100vh;
-  padding: 32px;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.32), rgba(0,0,0,0.18)),
-    var(--color-page-bg);
-}
-
-.workspace {
-  display: grid;
-  grid-template-columns: 168px minmax(0, 1fr);
-  gap: 16px;
-  max-width: 1440px;
+  max-width: 1320px;
+  min-height: 760px;
   margin: 0 auto;
-}
-```
-
-### Main Panel
-
-The main panel is the central visual object. It should feel like a frosted white slab.
-
-```css
-.main-panel {
-  border-radius: 28px;
-  background: var(--color-surface);
-  border: 1px solid var(--color-border-light);
-  box-shadow:
-    0 28px 80px rgba(20, 21, 22, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.82);
-  backdrop-filter: blur(22px);
+  display: grid;
+  grid-template-columns: 188px minmax(0, 1fr);
+  border-radius: var(--radius-shell);
+  background: var(--shell-bg);
+  border: 1px solid var(--shell-border);
+  box-shadow: var(--shadow-shell);
   overflow: hidden;
 }
+
+.app-sidebar {
+  background: #ffffff;
+  border-right: 1px solid var(--line-soft);
+}
+
+.app-main {
+  background: #f7fbff;
+  padding: 16px;
+  min-width: 0;
+}
 ```
 
-### Spacing
+Responsive:
 
-- Page padding: 24-40px desktop, 16px mobile
-- Main panel padding: 28-36px desktop, 18-20px mobile
-- Card padding: 16-24px
-- Grid gap: 14-20px
-- Dense table cell padding: 12-16px horizontal
+- Tablet: sidebar becomes top segmented nav or collapsible rail.
+- Mobile: one-column layout, no horizontal scroll.
+- Cards stack vertically and preserve readable spacing.
 
-Use breathing room around important summaries, but keep management tables compact.
+### Top Stepper
 
-## Surfaces and Depth
-
-This style depends on layered soft depth. Use subtle shadows and inner highlights instead of heavy borders.
-
-### Surface Levels
-
-- Level 0: gray page background
-- Level 1: dark sidebar and main white workspace
-- Level 2: translucent cards inside the workspace
-- Level 3: floating pills, active badges, buttons, chart overlays
+Use for major flows. Shape may be a segmented horizontal rail.
 
 ```css
-.soft-card {
-  border-radius: 20px;
-  background: rgba(255, 255, 255, 0.72);
-  border: 1px solid rgba(255, 255, 255, 0.68);
-  box-shadow:
-    0 12px 28px rgba(28, 29, 30, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+.flow-stepper {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
-.dark-card {
-  border-radius: 22px;
-  background: linear-gradient(145deg, #444544, #2f302f);
-  color: var(--color-text-inverse);
-  box-shadow:
-    0 18px 44px rgba(20, 21, 22, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+.flow-step {
+  min-height: 42px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background: #eef3f9;
+  color: var(--text-muted);
+}
+
+.flow-step.is-active {
+  background: linear-gradient(135deg, var(--primary), var(--primary-deep));
+  color: #ffffff;
+  box-shadow: 0 10px 22px var(--primary-glow);
 }
 ```
 
-### Radius
+### Section Bands
 
-- Main panel: 28px
-- Sidebar: 24px
-- Dashboard cards: 18-22px
-- Buttons and inputs: 999px for pills, 12-14px for compact rectangular actions
-- Icons: circular containers, 32-44px
+The reference often places multiple cards inside a pale blue section band. Use
+this for dashboard groups instead of nesting decorative cards.
 
-## Navigation
+```css
+.section-band {
+  padding: 14px;
+  border-radius: var(--radius-section);
+  background: linear-gradient(180deg, #edf6ff, #f8fbff);
+  border: 1px solid var(--card-border);
+}
+```
+
+### Card Grid
+
+```css
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-card {
+  min-height: 88px;
+  padding: 14px;
+  border-radius: var(--radius-card);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  box-shadow: var(--shadow-card);
+}
+```
+
+Use stable card heights for repeated content. Long Chinese titles should wrap
+within the card rather than pushing controls out of alignment.
+
+## Component Guidelines
 
 ### Sidebar
 
-The sidebar is narrow, dark, and calm. It should not compete with the main content.
+Sidebar anatomy:
 
-- Width: 150-180px desktop
-- Background: dark charcoal
-- Radius: 24px
-- Items: icon circle plus short label
-- Active item: bright icon circle or soft white highlight
-- Labels: small, muted, high legibility
-- Bottom area: compact CTA/help card
+1. logo and product name
+2. user mini profile
+3. optional visitor/class strip
+4. grouped nav
+5. bottom resource links
 
-```css
-.sidebar {
-  border-radius: 24px;
-  background: linear-gradient(180deg, #3d3e3d, #2d2e2d);
-  color: var(--color-text-inverse);
-  box-shadow: 0 24px 70px rgba(18, 19, 20, 0.22);
-}
+Active item:
 
-.nav-item {
-  height: 44px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 14px;
-  color: var(--color-sidebar-muted);
-  font-size: 12px;
-}
+- blue background
+- white icon/text
+- small sparkle or dot decoration allowed only inside active item
 
-.nav-item.active {
-  color: #ffffff;
-}
+Inactive item:
 
-.nav-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  background: rgba(255, 255, 255, 0.08);
-}
+- white/transparent background
+- navy text
+- low-contrast icon
 
-.nav-item.active .nav-icon {
-  background: #ffffff;
-  color: var(--color-accent);
-}
-```
+### Quick Entry Cards
 
-## Components
+Use for shortcuts such as:
 
-### Buttons
+- 我的报告
+- 日程安排
+- 个人档案
+- 设备检测
+- 课后作业
+- 新建考核
+- 学生名单
 
-Primary buttons should be compact, pill-like, and warm. They should look tactile but not glossy.
+Style:
 
-```css
-.btn-primary {
-  height: 36px;
-  padding: 0 18px;
-  border-radius: 999px;
-  border: 0;
-  background: var(--color-accent);
-  color: #ffffff;
-  font-weight: 600;
-  box-shadow: 0 10px 24px var(--color-accent-glow);
-}
+- white card
+- colored icon chip
+- title below icon
+- no paragraph text unless needed
 
-.btn-secondary {
-  height: 36px;
-  padding: 0 18px;
-  border-radius: 999px;
-  border: 1px solid var(--color-border-subtle);
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--color-text-primary);
-}
-```
+### Progress Ring
 
-Use icon-only buttons for frequent tools such as refresh, export, filter, edit, delete, play, pause, upload, and settings. Add tooltips for icon-only actions.
+The progress ring is a signature element in the reference.
 
-### Inputs and Search
+Use it for:
 
-Inputs are soft pills or rounded rectangles with low contrast.
+- student interview readiness
+- report completion
+- assessment participation rate
+- teacher grading progress
+- course/assessment completion
 
-```css
-.input-soft {
-  height: 42px;
-  border-radius: 999px;
-  border: 1px solid rgba(24, 25, 27, 0.08);
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: inset 0 1px 4px rgba(20, 21, 22, 0.05);
-}
-```
+Visual:
 
-For B-end forms, use rounded rectangles instead of pills when fields are stacked or long.
+- blue primary arc
+- optional green comparison arc
+- large center percentage
+- short label below
 
-### Cards
+### Calendar And Timeline
 
-Use cards for dashboards, summaries, charts, and repeated items. Avoid nesting cards inside cards.
+Use a compact calendar on pages where time matters:
 
-Card types:
+- appointment selection
+- student schedule
+- teacher upcoming interviews
+- daily review tasks
 
-- Summary card: big number, short label, small trend or badge
-- Progress card: compact title, progress bar, target value
-- Chart card: minimal axes, few labels, large whitespace
-- Dark highlight card: one important KPI or recommendation
-- Chat/AI card: message bubbles, soft input pill, small avatar/badge
+Daily tasks should use a vertical timeline with colored dots, not a heavy table.
+
+### Ranking / Comparison Card
+
+The reference uses friendly ranking blocks with avatar medals. In this product,
+use them carefully:
+
+- student side: personal progress compared with class average
+- teacher side: workload / completed reviews / pending reviews
+
+Do not make assessment results feel like a public leaderboard unless the product
+explicitly requires it.
 
 ### Tables
 
-Tables should inherit the calm visual system but remain dense and readable.
+Teacher pages still need tables, but the table should inherit the soft style.
 
-- Header background: transparent or very light gray
-- Row height: 48-56px
-- Borders: subtle horizontal dividers
-- Hover: soft white overlay
-- Actions: icon buttons or compact text buttons
-- Status: small rounded badges
+Rules:
 
-Avoid heavy table borders and saturated row backgrounds.
+- table sits in a white card or section band
+- header row uses `#f5f9ff`
+- row height 52-64px
+- actions are compact blue text buttons or small primary buttons
+- avoid large red/orange pills for every row
+- pagination stays bottom-right
 
-### Tabs and Segmented Controls
+### Forms
 
-Use small pill segmented controls for filters such as daily, weekly, monthly, role, status, and assessment state.
+Use light form sections rather than long plain forms.
 
-```css
-.segmented {
-  display: inline-flex;
-  padding: 3px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.42);
-}
+- Group related settings into pale section bands.
+- Use two- or three-column fields on desktop.
+- Use small helper text for complex assessment rules.
+- Primary submit button is blue.
+- Dangerous actions use red only when destructive.
 
-.segmented-item {
-  min-width: 68px;
-  height: 30px;
-  border-radius: 999px;
-  display: grid;
-  place-items: center;
-  color: var(--color-text-secondary);
-}
-
-.segmented-item.active {
-  background: #ffffff;
-  color: var(--color-text-primary);
-  box-shadow: 0 8px 18px rgba(24, 25, 27, 0.08);
-}
-```
-
-### Badges
-
-Badges should be small and quiet.
-
-- Active/success: muted green
-- Pending/warning: muted amber
-- Failed/danger: coral-red
-- AI/generation: coral-orange pill with subtle glow
-
-## Charts and Data Visualization
-
-Charts should be minimal, tactile, and readable.
-
-- Use black or charcoal for primary bars/lines.
-- Use coral-orange for the selected or most important data point.
-- Use pale gray for inactive series.
-- Hide unnecessary grid lines.
-- Keep labels short.
-- Prefer rounded bar caps and thick progress arcs.
-
-For ECharts:
-
-```js
-const chartStyle = {
-  color: ["#17181a", "#e75f49", "#d9dcde"],
-  textStyle: {
-    color: "#5d6063",
-    fontFamily: "Inter, PingFang SC, Microsoft YaHei, Arial, sans-serif"
-  },
-  grid: {
-    left: 12,
-    right: 12,
-    top: 20,
-    bottom: 12,
-    containLabel: true
-  }
-};
-```
-
-## Iconography
-
-Use simple filled or rounded-line icons. In this project, prefer Ant Design Vue icons because the dependency already exists.
-
-Icon rules:
-
-- Icons sit inside circular soft containers.
-- Use charcoal icons on light surfaces.
-- Use white icons on dark surfaces.
-- Use coral only for active, alert, or primary-action icons.
-- Keep icon sizes between 14px and 18px inside nav/card controls.
-
-## Motion
-
-Motion should be subtle and functional.
-
-- Hover lift: translateY(-1px) or translateY(-2px)
-- Transition duration: 160-220ms
-- Easing: cubic-bezier(0.2, 0.8, 0.2, 1)
-- Avoid bouncy, playful, or large page animations.
-- Use soft fade/slide for modal and drawer entrances.
-
-```css
-.interactive {
-  transition:
-    transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    box-shadow 180ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    background-color 180ms ease;
-}
-
-.interactive:hover {
-  transform: translateY(-1px);
-}
-```
-
-## Responsive Behavior
-
-### Desktop
-
-- Keep sidebar visible.
-- Use 2-4 column dashboard grids.
-- Keep the main panel centered with max width.
-- Avoid full-bleed tables without visual containment.
-
-### Tablet
-
-- Collapse sidebar into a narrower icon rail.
-- Convert dense grids to 2 columns.
-- Keep cards at stable heights where possible.
-
-### Mobile
-
-- Use a single-column layout.
-- Replace sidebar with top navigation or bottom tab navigation.
-- Reduce main panel radius to 20px.
-- Avoid tiny chart labels. Prefer summaries and expandable details.
-
-## Application Mapping
-
-### Admin Dashboard
-
-Use this style strongly:
-
-- Dark sidebar
-- Frosted main panel
-- KPI cards
-- Soft table rows
-- Small segmented filters
-- Coral active states
-
-### Teacher Dashboard
-
-Use this style for:
-
-- Assessment configuration cards
-- Student progress summaries
-- Appointment status dashboards
-- Record review pages
-- Score update modals
+## Student Side Application
 
 ### Student Dashboard
 
-Use a slightly warmer, simpler version:
+Recommended modules:
 
-- Fewer dense widgets
-- Larger primary actions
-- More direct status cards
-- Keep the same surface, radius, and accent language
+- top flow stepper: appointment, device check, interview, report
+- start class / current assessment area
+- quick entry cards
+- learning/interview progress ring
+- current rank or personal progress comparison
+- right-side calendar and today's tasks
 
-### Interview Room
+Adapt labels to the AI Interview System:
 
-Use the style carefully:
+- `开始上课` -> `开始面试`
+- `下次上课` -> `下一场面试`
+- `待办事项` -> `待完成任务`
+- `最近上课` -> `最近考核`
+- `学习情况` -> `面试准备度`
 
-- Keep controls highly legible and accessible.
-- Use dark highlight surfaces for live voice/AI status.
-- Use coral for recording, active question, and urgent state only.
-- Avoid visual noise during live interaction.
+### Student Profile / Report
 
-### Result and Analysis Pages
+Use the second reference image's profile layout:
 
-This style fits very well:
+- left profile summary
+- top journey stepper
+- progress ring
+- compact KPI cards
+- small ranked or comparative widgets
+- assessment/report completion cards
 
-- Use large score cards.
-- Use soft chart cards.
-- Use concise AI suggestion cards.
-- Use dark cards for final evaluation highlights.
+Replace learning metrics with interview-specific metrics:
 
-## Ant Design Vue Adaptation
+- 已完成考核数
+- 平均得分
+- 设备检测通过率
+- 报告生成进度
+- 追问完成率
+- 出勤/准时率
 
-When styling Ant Design Vue components, prefer token-level overrides and scoped wrappers.
+### Student Assessment Detail
 
-Suggested direction:
+Use section bands:
 
-- `borderRadius`: 14-20 for inputs, cards, modals
-- `colorPrimary`: `#e75f49`
-- `colorText`: `#17181a`
-- `colorTextSecondary`: `#5d6063`
-- `colorBorder`: `rgba(24,25,27,0.10)`
-- `controlHeight`: 38-42
-- `boxShadow`: soft neutral shadows only
+- assessment info
+- appointment status
+- device check
+- question/answer summary
+- score overview
+- report recommendations
 
-Avoid the default bright blue Ant Design primary color unless it is required by an existing feature.
+Avoid the current all-dark progress side card. Use blue progress and white cards.
 
-## Do
+## Teacher Side Application
 
-- Use grayscale depth, white translucent panels, and dark compact navigation.
-- Use coral-orange as the only strong accent.
-- Keep dashboard content clear, scannable, and operational.
-- Use rounded cards, soft shadows, and thin borders.
-- Make metrics and status obvious at a glance.
-- Keep charts minimal and elegant.
-- Use icon buttons with tooltips for frequent operations.
+### Teacher Home
 
-## Don't
+Teacher home should become an operational cockpit:
 
-- Do not use large marketing hero sections in the product app.
-- Do not use saturated blue/purple gradients.
-- Do not place cards inside cards.
-- Do not overuse glass blur where text readability matters.
-- Do not make tables too airy for management workflows.
-- Do not use multiple competing accent colors on the same page.
-- Do not copy any source brand logo or trademarked assets.
+- top flow: 考核配置 -> 学生安排 -> 面试进行 -> 结果复盘
+- summary cards: 今日面试、待核分、已完成、异常任务
+- calendar/timeline: upcoming interviews and deadlines
+- quick entries: 新建考核、学生管理、考核记录、报告导出
+- progress rings: grading progress / report completion
 
-## Implementation Prompt For AI Agents
+### Student Management
 
-When implementing UI changes, follow this instruction:
+Use a soft table shell:
 
-> Read `DESIGN.md` first. Restyle the target page into a minimal B-end dashboard style with grayscale spatial background, dark compact sidebar, frosted white main panel, soft rounded cards, coral-orange accent states, and dense but readable operational content. Preserve existing data flow and user workflows. Do not add marketing sections. Do not copy brand logos or trademarked assets. Use existing Vue 3, Ant Design Vue, Tailwind CSS, and ECharts patterns where possible.
+- filters in one pale band at top
+- action buttons aligned right
+- table with blue active focus, no heavy shadows
+- import/export as secondary outlined buttons
 
-## Reference Summary
+### Assessment Settings
 
-The reference image shows a minimal dashboard with:
+Use cards instead of a single long table:
 
-- A dark charcoal vertical sidebar.
-- A large frosted white rounded workspace.
-- Small circular icon navigation.
-- Soft cards and progress widgets.
-- Coral-orange active badges and chart highlights.
-- High-contrast black typography.
-- Minimal charts with black, gray, and orange.
-- Overall premium, quiet, grayscale B-end atmosphere.
+- basic info card
+- scoring rules card
+- question settings card
+- appointment settings card
+- participating students card
+
+Each card should have a blue section icon and compact fields.
+
+### Assessment Records
+
+Use table plus summary:
+
+- summary strip: total records, average score, pending review, exported reports
+- records table
+- right-side or modal detail drawer for score breakdown
+- export button in primary blue
+
+## Motion And Interaction
+
+Motion should be light and functional:
+
+- hover card lifts 2-4px with blue shadow
+- active nav slides or fades quickly
+- progress rings animate once on entry
+- stepper change uses 160-220ms transition
+- avoid bouncy animation
+
+Focus states:
+
+- blue 2px focus outline
+- accessible contrast
+- visible keyboard focus for all buttons and form controls
+
+## Do / Do Not
+
+Do:
+
+- Use a bright white app shell.
+- Use pale blue section backgrounds.
+- Make navigation compact and clear.
+- Use blue as the primary active state.
+- Show progress and next actions visibly.
+- Prefer cards with specific operational meaning.
+- Keep teacher pages dense but friendly.
+- Keep student pages guided and encouraging.
+
+Do not:
+
+- Reuse the previous charcoal/cream dashboard style for this refresh.
+- Turn dashboards into landing pages.
+- Use oversized hero typography inside the app.
+- Use decorative people illustrations or stock photos.
+- Put poster decorations inside the real product frame.
+- Make every card a different saturated color.
+- Hide important actions in low-contrast text.
+- Allow horizontal overflow on student pages.
+- Let table actions be clipped on teacher pages.
+
+## Implementation Notes For This Repo
+
+This project uses Vue and Ant Design Vue. Prefer scoped wrappers and CSS custom
+properties over one-off inline styles.
+
+Suggested wrapper classes:
+
+- `.edu-page`
+- `.edu-shell`
+- `.edu-sidebar`
+- `.edu-main`
+- `.edu-stepper`
+- `.edu-section`
+- `.edu-card`
+- `.edu-stat-card`
+- `.edu-progress-ring`
+- `.edu-table-card`
+
+When adapting Ant Design Vue:
+
+- Override tokens at wrapper scope where possible.
+- Keep table row heights predictable.
+- Use `Button` primary for the strongest page action only.
+- Use segmented controls or stepper tabs for workflow state.
+- Use icon chips for quick entry cards.
+
+## Migration Checklist
+
+Before shipping a redesigned student or teacher page:
+
+- The page uses the light blue/white app shell.
+- The active route is obvious in the sidebar.
+- The top context or workflow step is visible.
+- Cards answer real product questions.
+- Primary next action is visible without scrolling.
+- Text fits at desktop, tablet, and mobile widths.
+- No important table columns are clipped.
+- No decorative background competes with content.
+- Empty states are friendly but compact.
+- The page still works for repeated daily operation.
