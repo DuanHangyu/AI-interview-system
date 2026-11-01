@@ -1,14 +1,11 @@
 package system.assessment.defense.application.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import system.assessment.defense.application.dto.backed.DigitalHumanDTO;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -64,12 +61,7 @@ public class StudentTodoDefenseDTO {
     @Schema(description = "可预约时间段")
     private List<CanAppointmentTimeDTO> canAppointmentTimes;
 
-    @Schema(description = "数字人信息")
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    private DigitalHumanDTO digitalHuman;
 
-    @JsonIgnore
-    private Integer digitalHumanId;
 
     public Boolean getFinishDefense() {
         return finishDefense != null && finishDefense;

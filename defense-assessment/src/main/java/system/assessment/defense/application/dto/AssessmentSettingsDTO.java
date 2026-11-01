@@ -5,7 +5,6 @@ import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import system.assessment.defense.application.dto.backed.AppointmentSettingDTO;
-import system.assessment.defense.application.dto.backed.DigitalHumanDTO;
 import system.assessment.defense.application.dto.backed.SchoolClassStudentDTO;
 
 import java.util.List;
@@ -94,8 +93,6 @@ public class AssessmentSettingsDTO {
     @Schema(description = "参与学生")
     private List<ParticipatingStudentDTO> participatingStudents;
 
-    @Schema(description = "数字人信息")
-    private DigitalHumanDTO digitalHuman;
 
     @Data
     @Schema(description = "参与学生")

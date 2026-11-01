@@ -88,8 +88,6 @@ public class AssessmentAppService {
 
     private final StudentAssessmentAppointmentService studentAssessmentAppointmentService;
 
-    private final DigitalHumanService digitalHumanService;
-
     private final OssManager ossManager;
 
     private final ApplicationEventPublisher publisher;
@@ -254,19 +252,6 @@ public class AssessmentAppService {
             // 存储学生信息的映射表，用于后续快速查找
             Map<Integer, UserPO> studentMap = studentMapFuture.get();
 
-            // 查询对应的数字人信息
-            List<Integer> digitalHumanIds = records.stream()
-                    .map(AssessmentSettingPO::getDigitalHumanId)
-                    .filter(Objects::nonNull)
-                    .distinct().toList();
-            List<DigitalHumanPO> digitalHumans = new ArrayList<>();
-            if (CollectionUtils.isNotEmpty(digitalHumanIds)) {
-                digitalHumans = digitalHumanService.listByIds(digitalHumanIds);
-            }
-            Map<Integer, DigitalHumanDTO> digitalHumanIdMap = digitalHumans.stream()
-                    .map(item -> DigitalHumanDTO.of(item, this::convertToFileDTO))
-                    .collect(Collectors.toMap(DigitalHumanDTO::getId, item -> item));
-
             // 转换 PO 为 DTO，并填充参与学生信息
             return poPage.convert(item -> {
                 AssessmentSettingsDTO settingDTO = BeanUtil.copyProperties(item, AssessmentSettingsDTO.class, "participatingStudents", "assessmentFiles");
@@ -274,11 +259,6 @@ public class AssessmentAppService {
                 if (StrUtil.isNotBlank(assessmentFiles)) {
                     List<FileDTO> fileDTOS = JSONUtil.toList(assessmentFiles, FileDTO.class);
                     settingDTO.setAssessmentFiles(fileDTOS);
-                }
-                Integer digitalHumanId = item.getDigitalHumanId();
-                if (digitalHumanId != null) {
-                    Optional.ofNullable(digitalHumanIdMap.get(digitalHumanId))
-                            .ifPresent(settingDTO::setDigitalHuman);
                 }
 
                 // 受邀老师
@@ -370,29 +350,6 @@ public class AssessmentAppService {
         AssessmentSimpleDTO assessmentSimpleDTO = BeanUtil.copyProperties(setting, AssessmentSimpleDTO.class);
         Optional<StudentAssessmentRecordPO> recordOp = recordService.findByStudentIdAndAssessmentId(studentId, assessmentId);
         recordOp.ifPresent(item -> assessmentSimpleDTO.setFinishDefense(item.getEndDefenseTime() != null));
-        Integer digitalHumanId = setting.getDigitalHumanId();
-        if (digitalHumanId == null || digitalHumanId == 0) {
-            DigitalHumanDTO digitalHumanDTO = Optional.ofNullable(digitalHumanService.getOne(Wrappers.lambdaQuery(DigitalHumanPO.class)
-                            .eq(DigitalHumanPO::getDefaultFlag, true)))
-                    .map(item -> DigitalHumanDTO.builder()
-                            .id(item.getId())
-                            .name(item.getName())
-                            .video(convertToFileDTO(item.getVideo()))
-                            .lipShape(convertToFileDTO(item.getLipShape()))
-                            .build())
-                    .orElse(null);
-            assessmentSimpleDTO.setDigitalHuman(digitalHumanDTO);
-        } else {
-            DigitalHumanPO digitalHuman = digitalHumanService.getById(digitalHumanId);
-            if (digitalHuman != null) {
-                assessmentSimpleDTO.setDigitalHuman(DigitalHumanDTO.builder()
-                        .id(digitalHuman.getId())
-                        .name(digitalHuman.getName())
-                        .video(convertToFileDTO(digitalHuman.getVideo()))
-                        .lipShape(convertToFileDTO(digitalHuman.getLipShape()))
-                        .build());
-            }
-        }
         return assessmentSimpleDTO;
     }
 

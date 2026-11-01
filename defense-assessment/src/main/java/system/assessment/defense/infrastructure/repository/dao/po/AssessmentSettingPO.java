@@ -93,8 +93,6 @@ public class AssessmentSettingPO {
     @Schema(description = "最后预约时间")
     private LocalDateTime lastAppointTime;
 
-    @Schema(description = "数字人id")
-    private Integer digitalHumanId;
 
     @Schema(description = "预约设置")
     @TableField(exist = false)

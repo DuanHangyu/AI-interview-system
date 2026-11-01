@@ -4,7 +4,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
-import system.assessment.defense.application.dto.backed.DigitalHumanDTO;
 
 /**
  * @USER taoHouChao
@@ -42,6 +41,4 @@ public class AssessmentSimpleDTO {
     @Schema(description = "是否完成答辩")
     private Boolean finishDefense;
 
-    @Schema(description = "数字人信息")
-    private DigitalHumanDTO digitalHuman;
 }

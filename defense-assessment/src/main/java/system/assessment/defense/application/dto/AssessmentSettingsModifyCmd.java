@@ -85,8 +85,6 @@ public class AssessmentSettingsModifyCmd {
     @Schema(description = "学生id集合")
     private List<Integer> studentIds;
 
-    @Schema(description = "数字人id")
-    private Integer digitalHumanId;
 
     public AssessmentSettingPO toPO(){
         return AssessmentSettingPO.builder()
@@ -107,7 +105,6 @@ public class AssessmentSettingsModifyCmd {
                 .question(question)
                 .showResult(showResult)
                 .needAppoint(needAppoint)
-                .digitalHumanId(digitalHumanId)
                 .build();
     }
 

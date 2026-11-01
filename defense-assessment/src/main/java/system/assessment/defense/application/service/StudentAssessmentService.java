@@ -22,7 +22,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import system.assessment.defense.application.dto.*;
-import system.assessment.defense.application.dto.backed.DigitalHumanDTO;
 import system.assessment.defense.application.dto.front.StudentAppointmentCmd;
 import system.assessment.defense.application.manage.GeminiManager;
 import system.assessment.defense.application.manage.OssManager;
@@ -151,8 +150,6 @@ public class StudentAssessmentService {
     }
 
     private final RedisTemplate<String, Object> redisTemplate;
-
-    private final DigitalHumanService digitalHumanService;
 
     private final StudentAssessmentRecordService recordService;
 
@@ -422,7 +419,6 @@ public class StudentAssessmentService {
                 .answerTime(item.getAnswerTime())
                 .question(item.getQuestion())
                 .defense(item.getDefense())
-                .digitalHumanId(item.getDigitalHumanId())
                 .build());
         List<StudentTodoDefenseDTO> resultRecords = resultPage.getRecords();
         if (CollectionUtils.isNotEmpty(resultRecords)) {
@@ -435,25 +431,6 @@ public class StudentAssessmentService {
             Map<Integer, StudentAssessmentAppointmentPO> assessmentAppointmentTimeMap = studentSummary.getAppointments().stream()
                     .collect(Collectors.toMap(StudentAssessmentAppointmentPO::getAssessmentId, item -> item, (v1, v2) -> v1));
 
-            // 查询数字人信息
-            List<DigitalHumanPO> allDigitalHumans = digitalHumanService.list();
-            DigitalHumanDTO defaultDigitalHuman = allDigitalHumans.stream()
-                    .filter(item -> Objects.equals(item.getDefaultFlag(), true))
-                    .findFirst()
-                    .map(this::toDigitalHumanDTO)
-                    .orElse(null);
-
-            // 查询考核的预约时间段信息
-            Map<Integer, DigitalHumanDTO> digitalHumanIdMap = allDigitalHumans.stream()
-                    .map(item -> DigitalHumanDTO.builder()
-                            .id(item.getId())
-                            .name(item.getName())
-                            .video(getFileDTO(item.getVideo()))
-                            .lipShape(getFileDTO(item.getLipShape()))
-                            .defaultFlag(item.getDefaultFlag())
-                            .build())
-                    .collect(Collectors.toMap(DigitalHumanDTO::getId, item -> item));
-
             for (StudentTodoDefenseDTO resultRecord : resultRecords) {
                 Optional.ofNullable(assessmentIdMap.get(resultRecord.getId()))
                         .ifPresent((value) -> resultRecord.setFinishDefense(isDefenseFinishedForCurrentTodo(value)));
@@ -462,9 +439,6 @@ public class StudentAssessmentService {
                             resultRecord.setTimePeriod(iem.getTimePeriod());
                             resultRecord.setLocation(iem.getLocation());
                         });
-                DigitalHumanDTO digitalHumanDTO = Optional.ofNullable(digitalHumanIdMap.get(resultRecord.getDigitalHumanId()))
-                        .orElse(defaultDigitalHuman);
-                resultRecord.setDigitalHuman(digitalHumanDTO);
             }
         }
         return resultPage;
@@ -477,19 +451,6 @@ public class StudentAssessmentService {
         FileDTO fileDTO = JSONUtil.toBean(file, FileDTO.class);
         fileDTO.setPresignedUrl(ossManger.getSignedUrl(fileDTO.getFileUrl()));
         return fileDTO;
-    }
-
-    private DigitalHumanDTO toDigitalHumanDTO(DigitalHumanPO digitalHumanPO) {
-        if (digitalHumanPO == null) {
-            return null;
-        }
-        return DigitalHumanDTO.builder()
-                .id(digitalHumanPO.getId())
-                .name(digitalHumanPO.getName())
-                .video(getFileDTO(digitalHumanPO.getVideo()))
-                .lipShape(getFileDTO(digitalHumanPO.getLipShape()))
-                .defaultFlag(digitalHumanPO.getDefaultFlag())
-                .build();
     }
 
     private List<Integer> noNeedAppointAssessmentIds(List<Integer> assessmentIds) {

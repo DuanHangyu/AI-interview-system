@@ -52,7 +52,6 @@ CREATE TABLE `assessment` (
   `assessment_fail_punish` TINYINT(1) DEFAULT 0,
   `reschedule_appoint_time` DATETIME DEFAULT NULL,
   `last_appoint_time` DATETIME DEFAULT NULL,
-  `digital_human_id` INT DEFAULT NULL,
   `deleted` TINYINT(1) DEFAULT 0,
   PRIMARY KEY (`id`),
   KEY `idx_assessment_create_id` (`create_id`)
@@ -93,17 +92,6 @@ CREATE TABLE `assessment_student_relation` (
   PRIMARY KEY (`id`),
   KEY `idx_asr_assessment_id` (`assessment_id`),
   KEY `idx_asr_student_id` (`student_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ---------- digital_human ----------
-DROP TABLE IF EXISTS `digital_human`;
-CREATE TABLE `digital_human` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `name` VARCHAR(255) DEFAULT NULL,
-  `video` VARCHAR(1000) DEFAULT NULL,
-  `lip_shape` VARCHAR(1000) DEFAULT NULL,
-  `default_flag` TINYINT(1) DEFAULT 0,
-  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- lock_key ----------

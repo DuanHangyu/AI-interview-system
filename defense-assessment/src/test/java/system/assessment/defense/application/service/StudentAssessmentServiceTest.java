@@ -18,7 +18,6 @@ import system.assessment.defense.infrastructure.common.HttpUtils;
 import system.assessment.defense.infrastructure.repository.dao.po.StudentAssessmentRecordPO;
 import system.assessment.defense.infrastructure.repository.dao.service.AssessmentAppointmentSettingService;
 import system.assessment.defense.infrastructure.repository.dao.service.AssessmentSettingService;
-import system.assessment.defense.infrastructure.repository.dao.service.DigitalHumanService;
 import system.assessment.defense.infrastructure.repository.dao.service.StudentAssessmentAppointmentService;
 import system.assessment.defense.infrastructure.repository.dao.service.StudentAssessmentQuestionAnswerService;
 import system.assessment.defense.infrastructure.repository.dao.service.StudentAssessmentRecordService;
@@ -172,7 +171,6 @@ class StudentAssessmentServiceTest {
     private StudentAssessmentService newStudentAssessmentService(StudentAssessmentRecordService recordService) {
         return new StudentAssessmentService(
                 mock(RedisTemplate.class),
-                mock(DigitalHumanService.class),
                 recordService,
                 mock(UserService.class),
                 mock(AssessmentSettingService.class),

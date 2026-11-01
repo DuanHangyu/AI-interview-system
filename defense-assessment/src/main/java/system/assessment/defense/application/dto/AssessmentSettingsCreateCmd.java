@@ -86,8 +86,6 @@ public class AssessmentSettingsCreateCmd {
     private List<Integer> studentIds;
 
 
-    @Schema(description = "数字人id")
-    private Integer digitalHumanId;
 
     public AssessmentSettingPO toPO(){
         return AssessmentSettingPO.builder()
@@ -107,7 +105,6 @@ public class AssessmentSettingsCreateCmd {
                 .question(question)
                 .showResult(showResult)
                 .needAppoint(needAppoint)
-                .digitalHumanId(digitalHumanId)
                 .createId(StpUtil.getLoginIdAsInt())
                 .build();
     }
