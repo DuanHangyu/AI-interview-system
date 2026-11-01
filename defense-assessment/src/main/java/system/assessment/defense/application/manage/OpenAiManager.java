@@ -216,13 +216,6 @@ public class OpenAiManager {
         return doCall(model, messages, schemaName, schemaJson, null);
     }
 
-    /**
-     * 多轮对话（用于 GeminiController.lastQuestion 替换）
-     */
-    public String chatCompletionMultiTurn(String model, List<Map<String, Object>> messages) {
-        return doCall(model, messages, null, null, null);
-    }
-
     private List<Map<String, Object>> buildMessages(String systemPrompt, Map<String, Object> userMessage) {
         List<Map<String, Object>> messages = new ArrayList<>();
         if (systemPrompt != null && !systemPrompt.isBlank()) {

@@ -81,18 +81,6 @@ public class StudentBackendController {
         ExcelUtils.exportExcel(studentExcels);
     }
 
-    @GetMapping("/executor")
-    @Operation(summary = "批量执行")
-    public void executor() {
-        studentAppService.batchAnalysisUserInfo();
-    }
-
-    @GetMapping("/all")
-    @Operation(summary = "获取所有学生")
-    public List<StudentDTO> all() {
-        return studentAppService.allStudent();
-    }
-
     @GetMapping("/school-class-student")
     @Operation(summary = "获取班级学生")
     public List<SchoolClassStudentDTO> schoolClassStudentList() {

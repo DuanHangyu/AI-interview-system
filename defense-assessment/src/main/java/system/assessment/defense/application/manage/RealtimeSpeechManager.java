@@ -17,7 +17,6 @@ import org.springframework.web.socket.WebSocketSession;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.time.Duration;
 import java.util.Base64;
 import java.util.Map;
 import java.util.Optional;
@@ -221,10 +220,6 @@ public class RealtimeSpeechManager {
         if (session != null && session.belongsTo(clientSession) && sessions.remove(studentId, session)) {
             session.close();
         }
-    }
-
-    public Duration transcriptWaitDuration() {
-        return Duration.ofMillis(transcriptWaitMs);
     }
 
     private void handleServerEvent(RealtimeSpeechSession session, String text) {

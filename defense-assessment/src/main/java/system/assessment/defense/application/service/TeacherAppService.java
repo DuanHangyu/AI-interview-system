@@ -8,9 +8,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import system.assessment.defense.application.dto.*;
-import system.assessment.defense.application.dto.backed.TeacherModifyPasswordCmd;
-import system.assessment.defense.infrastructure.emuns.ErrorCodeEnums;
-import system.assessment.defense.infrastructure.exception.BusinessException;
 import system.assessment.defense.infrastructure.repository.dao.po.UserPO;
 import system.assessment.defense.infrastructure.repository.dao.service.UserService;
 
@@ -60,16 +57,5 @@ public class TeacherAppService {
                 .filter(item -> item.getId() != teacherId)
                 .map(teacherPO -> BeanUtil.copyProperties(teacherPO, TeacherDTO.class))
                 .toList();
-    }
-
-    public Boolean modifyPassword(TeacherModifyPasswordCmd modifyPasswordCmd) {
-        int teacherId = StpUtil.getLoginIdAsInt();
-        UserPO teacher = userService.findById(teacherId).orElseThrow(() -> new BusinessException(ErrorCodeEnums.USER_NOT_FOUND));
-        if (!Objects.equals(teacher.getPassword(), modifyPasswordCmd.getOldPassword())) {
-            throw new BusinessException(ErrorCodeEnums.PASSWORD_ERROR);
-        }
-        return userService.update(Wrappers.lambdaUpdate(UserPO.class)
-                .set(UserPO::getPassword, modifyPasswordCmd.getNewPassword())
-                .eq(UserPO::getId, teacherId));
     }
 }

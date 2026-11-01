@@ -1,6 +1,5 @@
 import { onUnmounted, ref } from "vue";
 import { getToken } from "@/utils/auth";
-import { mittEmit } from "@/utils/appMitt";
 
 export function useSpeechRecognition(options = {}) {
   const transcriptionText = ref("");
@@ -293,7 +292,6 @@ export function useSpeechRecognition(options = {}) {
       };
 
       socket.onmessage = (event) => {
-        // mittEmit("SOURCE:BLOB", event.data);
         try {
           const result = event.data;
           if (result) {

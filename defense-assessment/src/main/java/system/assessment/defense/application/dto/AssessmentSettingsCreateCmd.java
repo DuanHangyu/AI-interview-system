@@ -6,14 +6,10 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
-import org.apache.commons.lang3.StringUtils;
 import system.assessment.defense.application.dto.backed.SchoolClassStudentSaveCmd;
-import system.assessment.defense.infrastructure.emuns.ErrorCodeEnums;
-import system.assessment.defense.infrastructure.exception.BusinessException;
 import system.assessment.defense.infrastructure.repository.dao.po.AssessmentSettingPO;
 
 import java.util.List;
-import java.util.Objects;
 
 /**
  * @USER taoHouChao

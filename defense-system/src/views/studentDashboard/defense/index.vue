@@ -1,21 +1,21 @@
 <template>
   <main
-    class="size-full px-9 pt-6 pb-8 defense flex flex-col overflow-hidden relative min-w-[1500px]"
+    class="size-full px-4 xl:px-9 pt-6 pb-8 defense flex flex-col overflow-auto relative"
   >
-    <div class="min-w-[1450px] w-full flex-shrink-0">
+    <div class="defense-header-bar w-full flex-shrink-0">
       <DefenseHeader class="w-full" />
     </div>
     <div class="flex-grow w-full flex items-center justify-center">
       <div
-        class="flex mt-4 max-h-[800px] max-w-[1450px] h-full w-full relative"
+        class="defense-stage flex mt-4 max-h-[800px] max-w-[1450px] h-full w-full relative"
       >
         <section
           v-if="showArr?.[0] == 1"
-          class="w-[800px] h-full bg-[rgba(0,0,0,0.15)] rounded-[32px] mr-4 p-4 relative fade-in flex-shrink-0"
+          class="defense-file-panel w-[800px] h-full bg-[rgba(0,0,0,0.15)] rounded-[32px] mr-4 p-4 relative fade-in flex-shrink-0"
         >
           <div
             class="h-full w-full flex flex-col items-center justify-center pb-[250px]"
-            v-if="!uploadFile?.presignedUrl"
+            v-if="!filePreviewUrl"
           >
             <img
               src="@/assets/defense/empty.png"
@@ -44,7 +44,7 @@
             v-else
           >
             <iframe
-              :src="uploadFile?.presignedUrl"
+              :src="filePreviewUrl"
               class="size-full"
               frameborder="0"
             ></iframe>
@@ -58,7 +58,7 @@
             @change="handleChange"
             class="mt-3 flex-shrink-0"
             :beforeUpload="beforeUpload"
-            v-if="uploadFile?.presignedUrl"
+            v-if="filePreviewUrl"
           >
             <div
               class="reUpload hover:scale-105 hover:bg-[rgba(255,255,255,0.3)] absolute bottom-[190px] right-[40px] flex items-center justify-center"
@@ -69,7 +69,7 @@
         </section>
         <section
           v-show="showArr?.[1] == 2"
-          class="flex-grow max-h-[600px] bg-[rgba(123,123,123,0.5)] rounded-[32px] flex flex-col p-4 fade-in videoBox"
+          class="defense-video-panel flex-grow max-h-[600px] bg-[rgba(123,123,123,0.5)] rounded-[32px] flex flex-col p-4 fade-in videoBox"
         >
           <div class="flex-grow w-full rounded-[32px] overflow-hidden relative">
             <video
@@ -110,7 +110,7 @@
               </div>
             </div>
             <div
-              class="w-[140px] h-[50px] bg-[rgba(255,255,255,0.15)] hover:bg-[rgba(255,255,255,0.3)] hover:scale-105 cursor-pointer flex items-center justify-center text-lg font-medium text-white flex-shrink-0 rounded-[693px]"
+              class="defense-main-action w-[140px] h-[50px] bg-[rgba(255,255,255,0.15)] hover:bg-[rgba(255,255,255,0.3)] hover:scale-105 cursor-pointer flex items-center justify-center text-lg font-medium text-white flex-shrink-0 rounded-[693px]"
               @click="
                 () => {
                   if (submitLoading) return;
@@ -137,7 +137,7 @@
         </section>
         <section
           v-if="showArr?.[2] == 3"
-          class="absolute bottom-[-10px] left-0 w-full bottom-card fade-in"
+          class="defense-bottom-panel absolute bottom-[-10px] left-0 w-full bottom-card fade-in"
         >
           <div
             class="bottom-card-in py-6 px-2 text-[#FFFFFF] font-semibold text-2xl"
@@ -150,13 +150,32 @@
       </div>
     </div>
     <!-- 加载遮罩层 -->
-    <LoadingOverlay v-if="!isWarmupDone" />
+    <LoadingOverlay v-if="!isWarmupDone && !blockingError" :text="loadingText" />
+    <div
+      v-if="blockingError"
+      class="absolute inset-0 z-50 flex items-center justify-center bg-[rgba(95,90,87,0.86)]"
+    >
+      <div
+        class="w-[460px] max-w-[90vw] rounded-2xl bg-white/95 px-8 py-7 text-center shadow-2xl"
+      >
+        <div class="text-xl font-semibold text-[#1f2937] mb-3">答辩连接异常</div>
+        <div class="text-base leading-7 text-[#4b5563] whitespace-pre-line">
+          {{ blockingError }}
+        </div>
+        <button
+          class="mt-6 h-11 px-8 rounded-full bg-[#e75f49] text-white text-base font-medium hover:bg-[#f07157]"
+          @click="retryBlockedStep"
+        >
+          重试
+        </button>
+      </div>
+    </div>
   </main>
 </template>
 <script setup lang="ts">
 import DefenseHeader from "@/components/Layout/componets/DefenseHeader.vue";
 import WaveComponent from "@/components/Wave/index.vue";
-import { ref, onMounted, onUnmounted, createVNode, watch } from "vue";
+import { computed, ref, onMounted, onUnmounted, createVNode, watch } from "vue";
 import { useSpeechRecognition } from "@/composables/useSpeechRecognition.js";
 import { useRoute, useRouter } from "vue-router";
 import { getAssessmentDetail } from "@/api/assessment";
@@ -175,13 +194,22 @@ import {
   LoadingOutlined,
 } from "@ant-design/icons-vue";
 import { uploadAssessmentFile } from "@/api/studentAssessment";
-import { endAssessment, endDefense, startDefense } from "@/api/kh";
 
 const action = process.env.VUE_APP_BASE_API + "/file/upload";
 const headers = ref({
   Authorization: `Bearer ${getToken()}`,
 });
 const showArr = ref<number[]>([]);
+// 心跳间隔（毫秒）
+const HEARTBEAT_INTERVAL = 5000; // 30秒
+let heartbeatTimer: number | null | undefined = null;
+const reconnectAttempts = ref(0);
+const maxReconnectAttempts = 5;
+const reconnectInterval = 3000; // 3秒重试一次
+let reconnectTimer: number | null | undefined = null;
+const socket = ref<WebSocket | null>(null);
+const isConnected = ref(false);
+const connectionStatus = ref("Disconnected");
 const pageOff = ref(false);
 
 const route = useRoute();
@@ -196,33 +224,168 @@ const countdown = ref(0);
 let countdownTimer: any = null;
 let videoStream: any = null;
 const uploadFile = ref<Recordable>({});
+const filePreviewUrl = computed(() => buildFilePreviewUrl(uploadFile.value));
 const isWarmupDone = ref(false);
 const detail = ref<Recordable>({});
 const submitLoading = ref(false);
+const blockingError = ref("");
+const blockedStep = ref<"setup" | "defense">("setup");
+const loadingText = ref("正在加载中，请稍后...");
+let endingDefense = false;
+const mediaRequestTimeoutMs = 10000;
 
 const {
-  transcriptionText,
   startAudio,
+  stopAudio,
   initAudio,
   closeAudio,
-  startHeartbeat,
-  restartAudio,
   volumeLevel,
-} = useSpeechRecognition();
+  audioReady,
+  audioError,
+} = useSpeechRecognition({
+  onConnectionLost: handleDefenseAudioConnectionLost,
+});
+
+function buildFilePreviewUrl(file?: Recordable) {
+  if (!file?.fileUrl) {
+    return file?.presignedUrl || "";
+  }
+  const params = new URLSearchParams({ fileUrl: file.fileUrl });
+  const token = getToken();
+  if (token) {
+    params.set("Authorization", `Bearer ${token}`);
+  }
+  return `${process.env.VUE_APP_BASE_API}/file/preview?${params.toString()}`;
+}
+
+function setBlockingError(messageText: string, step: "setup" | "defense" = "setup") {
+  blockingError.value = messageText;
+  blockedStep.value = step;
+  submitLoading.value = false;
+}
+
+function clearBlockingError() {
+  blockingError.value = "";
+  loadingText.value = "正在加载中，请稍后...";
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function requestVideoWithTimeout() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return Promise.reject(new Error("当前浏览器不支持摄像头访问"));
+  }
+
+  let finished = false;
+  let timeoutId: number | undefined = undefined;
+  const timeoutMessage = "摄像头权限响应超时，请确认浏览器权限弹窗后重试。";
+  const mediaRequest = navigator.mediaDevices
+    .getUserMedia({ video: true })
+    .then((stream) => {
+      if (finished) {
+        stream.getTracks().forEach((track) => track.stop());
+        throw new Error(timeoutMessage);
+      }
+      return stream;
+    });
+
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, mediaRequestTimeoutMs);
+  });
+
+  return Promise.race([mediaRequest, timeout]).finally(() => {
+    finished = true;
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
+    }
+  });
+}
+
+function handleDefenseAudioConnectionLost() {
+  if (pageOff.value || !isDebating.value) {
+    return false;
+  }
+  clearInterval(countdownTimer);
+  isDebating.value = false;
+  submitLoading.value = false;
+  endingDefense = false;
+  setBlockingError(
+    "录音连接中断，本轮答辩未保存。请检查网络和麦克风后点击重试，重新开始答辩。",
+    "defense"
+  );
+  message.error("录音连接中断，请重新开始答辩");
+  return false;
+}
+
+function clearTextHeartbeat() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+}
+
+function isTextSocketOpen() {
+  return socket.value?.readyState === WebSocket.OPEN;
+}
+
+function sendAssessmentAction(action: string) {
+  if (!isTextSocketOpen()) {
+    setBlockingError("答辩连接已断开，请重试连接后继续。", "setup");
+    connect();
+    return false;
+  }
+  socket.value?.send(
+    JSON.stringify({
+      message: route.query?.id,
+      action,
+    })
+  );
+  return true;
+}
+
+async function retryBlockedStep() {
+  const step = blockedStep.value;
+  clearBlockingError();
+
+  const audioOk = audioReady.value || (await initAudio());
+  if (!audioOk) {
+    setBlockingError(audioError.value || "无法打开麦克风，请允许浏览器麦克风权限后重试。", "setup");
+    return;
+  }
+  const cameraOk = videoStream || (await startCamera());
+  if (!cameraOk) {
+    return;
+  }
+  if (!isConnected.value) {
+    connect();
+  }
+  isWarmupDone.value = true;
+  if (step === "defense") {
+    startDebateBefore();
+  }
+}
 
 async function startCamera() {
   try {
-    videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
-    console.log(videoRef.value);
-
+    videoStream = await requestVideoWithTimeout();
     if (videoRef.value) {
       videoRef.value.srcObject = videoStream;
       videoRef.value.onloadedmetadata = () => {
         videoRef.value.play();
       };
     }
+    return true;
   } catch (err) {
     console.error("摄像头打开失败：", err);
+    setBlockingError(
+      getErrorMessage(err, "无法打开摄像头，请允许浏览器摄像头权限后重试。"),
+      "setup"
+    );
+    return false;
   }
 }
 
@@ -236,10 +399,8 @@ function stopCamera() {
 }
 
 function startDebateBefore() {
-  startCountdown();
-  startDefense({ assessmentId: route.query?.id }).then((res) => {
-    startDebate();
-  });
+  clearBlockingError();
+  sendAssessmentAction("start-defense");
 }
 
 function stopDebateBefore() {
@@ -249,9 +410,16 @@ function stopDebateBefore() {
 }
 
 async function startDebate() {
+  if (isDebating.value) {
+    return;
+  }
+  const started = await startAudio();
+  if (!started) {
+    setBlockingError(audioError.value || "录音服务连接失败，请检查网络后重试。", "defense");
+    return;
+  }
   isDebating.value = true;
-  await startAudio();
-  // startCountdown();
+  startCountdown();
 }
 
 async function stopDebate() {
@@ -260,33 +428,30 @@ async function stopDebate() {
     icon: createVNode(ExclamationCircleOutlined),
     okText: "确认结束",
     onOk: async () => {
-      submitLoading.value = true;
-      isDebating.value = false;
-      stopCamera();
-      await closeAudio();
-      clearInterval(countdownTimer);
-      endDefense({
-        assessmentId: route.query?.id,
-      }).then(() => {
-        if (detail.value?.question) {
-          router.push({
-            name: "QuestionPage",
-            query: route.query,
-          });
-        } else {
-          endAssessment({
-            assessmentId: route.query?.id,
-          }).then(() => {
-            router.push({
-              name: "ResultOverPage",
-              query: route.query,
-            });
-          });
-        }
-      });
+      await finishDefenseTurn();
     },
   });
 }
+
+async function finishDefenseTurn() {
+  if (endingDefense) {
+    return;
+  }
+  endingDefense = true;
+  submitLoading.value = true;
+  clearInterval(countdownTimer);
+  isDebating.value = false;
+  stopAudio();
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  const sent = sendAssessmentAction("end-defense");
+  await closeAudio();
+  stopCamera();
+  if (!sent) {
+    submitLoading.value = false;
+    endingDefense = false;
+  }
+}
+
 function startCountdown() {
   countdown.value = detail.value?.duration;
   clearInterval(countdownTimer);
@@ -294,59 +459,183 @@ function startCountdown() {
   countdownTimer = setInterval(() => {
     countdown.value--;
     if (countdown.value <= 0) {
-      isDebating.value = false;
-      stopCamera();
-      closeAudio();
-      clearInterval(countdownTimer);
-      endDefense({
-        assessmentId: route.query?.id,
-      }).then(() => {
-        if (detail.value?.question) {
-          router.push({
-            name: "QuestionPage",
-            query: route.query,
-          });
-        } else {
-          endAssessment({
-            assessmentId: route.query?.id,
-          });
-          router.push({
-            name: "ResultOverPage",
-            query: route.query,
-          });
-        }
-      });
+      finishDefenseTurn();
     }
   }, 1000);
 }
+
+const connect = () => {
+  clearTextHeartbeat();
+  if (socket.value) {
+    socket.value?.close();
+  }
+  // 清除之前的重连定时器
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+  if (reconnectAttempts.value >= maxReconnectAttempts && !isConnected.value) {
+    connectionStatus.value = `Failed after ${maxReconnectAttempts} attempts`;
+    setBlockingError(
+      "答辩连接已断开，请检查网络后点击重试继续。",
+      isDebating.value ? "defense" : "setup"
+    );
+    return;
+  }
+  connectionStatus.value = "Connecting...";
+
+  // 创建 WebSocket 连接
+  const currentSocket = new WebSocket(
+    process.env.VUE_APP_BASE_TEXT_WS,
+    getToken() || ""
+  );
+  socket.value = currentSocket;
+
+  currentSocket.onopen = () => {
+    if (socket.value !== currentSocket) {
+      return;
+    }
+    connectionStatus.value = "Connected";
+    isConnected.value = true;
+    reconnectAttempts.value = 0; // 重置重连计数器
+    clearTextHeartbeat();
+    console.log("WebSocket connected");
+    heartbeatTimer = setInterval(() => {
+      if (socket.value === currentSocket && currentSocket.readyState === WebSocket.OPEN) {
+        currentSocket.send(JSON.stringify({ action: "ping" }));
+      }
+    }, HEARTBEAT_INTERVAL);
+  };
+
+  currentSocket.onmessage = (event) => {
+    if (socket.value !== currentSocket) {
+      return;
+    }
+    let messageData;
+    try {
+      messageData = JSON.parse(event.data);
+    } catch (error) {
+      console.warn("WebSocket 消息解析失败", error, event.data);
+      return;
+    }
+    const contentText = String(messageData?.content || "");
+    if (contentText == "开始答辩" && messageData?.normalMessage) {
+      startDebate();
+    }
+    if (contentText == "结束答辩") {
+      Modal.destroyAll();
+      submitLoading.value = false;
+      endingDefense = false;
+      // 等待完毕再跳转
+      if (detail.value?.question) {
+        router.push({
+          name: "QuestionPage",
+          query: route.query,
+        });
+      } else {
+        sendAssessmentAction("end-assessment");
+        router.push({
+          name: "ResultOverPage",
+          query: route.query,
+        });
+      }
+    } else if (!messageData?.normalMessage && contentText) {
+      message.error(contentText);
+      if (contentText.includes("重新答辩") || contentText.includes("录音")) {
+        setBlockingError(contentText, "defense");
+      }
+    }
+  };
+
+  currentSocket.onerror = (error: any) => {
+    if (socket.value !== currentSocket) {
+      return;
+    }
+    console.error("WebSocket error:", error);
+    connectionStatus.value = "Error: " + error.message;
+    attemptReconnect();
+    isConnected.value = false;
+  };
+
+  currentSocket.onclose = () => {
+    if (socket.value !== currentSocket) {
+      return;
+    }
+    clearTextHeartbeat();
+    connectionStatus.value = "Disconnected";
+    isConnected.value = false;
+    if (!pageOff.value) {
+      attemptReconnect();
+    }
+    console.log("WebSocket disconnected");
+  };
+};
+// 尝试重新连接
+const attemptReconnect = () => {
+  if (isConnected.value || reconnectTimer) {
+    return;
+  }
+  if (reconnectAttempts.value >= maxReconnectAttempts) {
+    setBlockingError(
+      "答辩连接已断开，请检查网络后点击重试继续。",
+      isDebating.value ? "defense" : "setup"
+    );
+    return;
+  }
+  reconnectAttempts.value += 1;
+  connectionStatus.value = `Attempting to reconnect (${reconnectAttempts.value}/${maxReconnectAttempts})...`;
+
+  reconnectTimer = setTimeout(() => {
+    connect();
+  }, reconnectInterval);
+};
 
 onMounted(async () => {
   const temp = await getAssessmentDetail(route.query?.id as unknown as number);
   detail.value = temp.data || {};
   countdown.value = temp.data?.duration;
-  await initAudio();
-  startHeartbeat();
-  await startCamera();
+  const audioOk = await initAudio();
+  if (!audioOk) {
+    setBlockingError(audioError.value || "无法打开麦克风，请允许浏览器麦克风权限后重试。", "setup");
+    return;
+  }
+  const cameraOk = await startCamera();
+  if (!cameraOk) {
+    return;
+  }
+  connect();
   isWarmupDone.value = true;
 });
 
 onUnmounted(() => {
   pageOff.value = true;
   stopCamera();
-  // closeAudio();
+  closeAudio();
   clearInterval(countdownTimer);
+  if (socket.value) {
+    socket.value.close();
+  }
+  clearTextHeartbeat();
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+  }
+  window.removeEventListener("beforeunload", handleBeforeUnload);
 });
 
-window.addEventListener("beforeunload", async () => {
+const handleBeforeUnload = () => {
   stopCamera();
-  await closeAudio();
+  closeAudio();
   clearInterval(countdownTimer);
-});
+};
+window.addEventListener("beforeunload", handleBeforeUnload);
 
 const beforeUpload = (file: FileType) => {
-  if (file?.type != "application/pdf") {
+  const isPdf =
+    file?.type === "application/pdf" ||
+    file?.name?.toLowerCase().endsWith(".pdf");
+  if (!isPdf) {
     message.error("只允许上传 PDF 文件");
-    return;
+    return false;
   }
   uploadProgress.value = 0;
   return true;
@@ -373,6 +662,8 @@ const handleChange = (info: UploadChangeParam) => {
           fileUrl: info.file?.response?.data?.url,
           fileName: info.file?.response?.data?.fileName,
         },
+      }).catch(() => {
+        uploadStatus.value = "exception";
       });
     } else {
       uploadStatus.value = "exception";
@@ -403,7 +694,9 @@ watch(
 </script>
 <style scoped>
 .defense {
-  background: #5f5a57;
+  background:
+    radial-gradient(circle at 82% 18%, rgba(244, 207, 85, 0.18), transparent 30%),
+    linear-gradient(180deg, #706f6b 0%, #5f5a57 100%);
 }
 .bottom-card {
   height: 265px;
@@ -559,5 +852,96 @@ video {
 }
 .videoBox {
   height: calc(100% - 270px);
+}
+
+.defense-header-bar {
+  max-width: 1450px;
+  margin: 0 auto;
+}
+
+@media (max-width: 1100px) {
+  .defense {
+    height: auto;
+    min-height: 100dvh;
+    padding: 18px 16px 24px;
+  }
+
+  .defense-stage {
+    height: auto;
+    max-height: none;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .defense-file-panel,
+  .defense-video-panel {
+    width: 100% !important;
+    min-height: 420px;
+    max-height: none;
+    margin-right: 0 !important;
+  }
+
+  .defense-video-panel {
+    height: auto;
+  }
+
+  .defense-bottom-panel {
+    position: relative !important;
+    bottom: auto !important;
+    left: auto !important;
+    min-height: 220px;
+    margin-top: 0;
+  }
+
+  .bottom-card {
+    height: auto;
+    min-height: 220px;
+  }
+}
+
+@media (max-width: 640px) {
+  .defense {
+    padding: 12px;
+  }
+
+  .defense-file-panel,
+  .defense-video-panel {
+    min-height: 340px;
+    border-radius: 24px;
+  }
+
+  .defense-file-panel {
+    padding: 12px;
+  }
+
+  .defense-action {
+    height: auto;
+    min-height: 112px;
+    flex-direction: column;
+    gap: 14px;
+    padding: 14px;
+    border-radius: 28px;
+  }
+
+  .defense-main-action,
+  .reUpload {
+    width: 100% !important;
+    max-width: 260px;
+  }
+
+  .reUpload {
+    right: 24px;
+    bottom: 24px;
+  }
+
+  .bottom-card {
+    padding: 14px;
+    border-radius: 28px;
+  }
+
+  .bottom-card-in {
+    border-radius: 22px;
+    font-size: 18px;
+  }
 }
 </style>

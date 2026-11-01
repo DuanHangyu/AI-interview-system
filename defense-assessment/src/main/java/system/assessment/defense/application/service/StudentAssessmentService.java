@@ -15,7 +15,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -40,7 +39,6 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -204,16 +202,6 @@ public class StudentAssessmentService {
                 }
             }
         }
-    }
-
-    @NotNull
-    private static String getLockKey() {
-        // 获取当前时间
-        LocalDateTime now = LocalDateTime.now();
-        // 定义格式
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
-        // 格式化为字符串
-        return now.format(formatter);
     }
 
     private String liveQuestionsKey(Integer studentId, Integer assessmentId) {
@@ -442,15 +430,6 @@ public class StudentAssessmentService {
             }
         }
         return resultPage;
-    }
-
-    private FileDTO getFileDTO(String file) {
-        if (StringUtils.isBlank(file)) {
-            return null;
-        }
-        FileDTO fileDTO = JSONUtil.toBean(file, FileDTO.class);
-        fileDTO.setPresignedUrl(ossManger.getSignedUrl(fileDTO.getFileUrl()));
-        return fileDTO;
     }
 
     private List<Integer> noNeedAppointAssessmentIds(List<Integer> assessmentIds) {
@@ -1572,85 +1551,6 @@ public class StudentAssessmentService {
                 .reAnalysis(record.getReAnalysis())
                 .location(location)
                 .build();
-    }
-
-    private String buildGenerateQuestionSystemInstruction() {
-        return """
-                    你是一位严谨的大学答辩导师，基于pdf文件给学生进行出题。
-                
-                    【角色与任务】：
-                     作为答辩导师，你需要根据知识背景和以下条件，设计能够有效评估学生理解深度和应用能力的问题。你的问题应当具有学术严谨性，同时符合教育评估的最佳实践。
-                
-                    【知识背景】：
-                     所有PDF格式的文件内容都是此次考核的知识背景材料。这些材料仅用于帮助你理解考核主题、相关概念和上下文环境。你应当充分理解这些背景知识，但生成问题时不能直接复制背景材料中的内容，而应当基于背景知识设计原创性问题。
-                
-                    【绝对规则与约束】：
-                     1. 生成的所有问题必须严格基于已有对话内容和提供的知识背景，严禁虚构或添加学生未提及的内容
-                     2. 问题应当具有明确的评估目标，能够检验学生对核心概念的理解和应用能力
-                     3. 避免提出模糊不清或过于宽泛的问题，确保问题具有可评估性和针对性
-                     4. 问题的难度应当适合大学生的学术水平，既不能过于简单也不能超出合理范围
-                
-                    【信息说明】：
-                     1. 是否首次提问：表示是否是首次出题
-                     2. 历史提问问题：这是之前已经提出过的问题列表，你需要确保新生成的问题不与这些问题重复，同时考虑问题的递进性和多样性
-                     3. 最近一次问答：这是上一次的提问和学生的回答，你需要分析学生的回答质量，决定是否需要追问或转换方向
-                     4. 是否追问：判断此次提问是直接生成一个全新的问题还是对最近一次问答进行追问的标记
-                     5. 追问标准：判断最近一次问答是否需要进行追问的标准
-                     6. 答辩内容：出题的依据之一，如果没有则忽略
-                     7. 是否使用题库：判断是否使用题库的标记
-                     8. 题库：准备的题库，题库中每个编号代表一个题目
-                
-                    【出题要求】
-                     1. 避免重复：确保新问题与“历史提问问题”中的内容不重复，包括语义重复。
-                     2. 递进性与多样性：
-                       若为首次提问，问题应为基础性、引导性问题；
-                       若非首次，应根据学习进度提升难度或转换角度（如从记忆→理解→应用→分析）。
-                     3. 追问逻辑（仅当 是否追问 = 是 时适用）：
-                       根据“追问标准”和“学生回答”判断其理解程度；
-                       追问应聚焦于澄清误解、深化思考或引导反思，而非简单重复。
-                     4. 题库使用（仅当 是否使用题库 = 是 时适用）：
-                       从题库中随机选择一个题目，必须严格遵守以下规则：
-                       4.1. 随机选择：从题库中完全随机选择题目，不能按照任何固定顺序（如编号顺序、难度顺序等）
-                       4.2. 避免模式：确保选择模式无规律可循，不要总是选择开头、结尾或特定位置的题目
-                       4.3. 考虑历史：确保新问题与“历史提问问题”中的内容不重复
-                     5. 语言风格：问题应清晰、简洁、具有启发性，适合当前学习者水平
-                
-                    【问题质量保障】：
-                     1. 确保每个问题都有明确的评估目标和预期回答要点
-                     2. 避免提出复合问题(一个问题中包含多个独立问题)
-                     3. 考虑问题的认知负荷，确保不会因问题表述复杂而影响对学生能力的准确评估
-                     4. 对于应用型和评估型问题，确保提供足够的上下文但不过度引导
-                     5. 适当使用Bloom分类法中的不同认知层次，确保问题覆盖知识、理解、应用、分析、综合和评估等多个层次
-                
-                    【生成模板与输出格式】：
-                     你的输出应当严格遵循以下JSON格式：
-                     {
-                       "follow": boolean, // 表示是否是追问问题
-                       "userQuestionBank": boolean //表示是否使用了题库
-                       "question": string // 生成的问题内容，应当清晰、简洁且直接
-                     }
-                
-                     注意事项：
-                     1. follow字段必须为布尔值，true表示追问，false表示新问题
-                     2. question字段应当只包含问题本身，不要添加任何解释、说明或额外文本
-                     3. 问题应当用中文表述，除非考核内容本身要求使用其他语言
-                     4. 问题长度应当适中，既不能过于简短导致不明确，也不能过于冗长影响理解
-                
-                    【学术伦理考虑】：
-                     1. 确保所有问题尊重学术诚信原则，不鼓励或暗示任何形式的学术不端行为
-                     2. 问题设计应当公平、无偏见，不会因文化背景、性别或其他非学术因素而对某些学生群体不利
-                     3. 考虑问题的可访问性，避免使用可能妨碍某些学生理解的晦涩术语或复杂句式
-                
-                    【最终审核】：
-                    在生成问题后，请自我审核以下方面：
-                    1. 问题是否与考核内容直接相关
-                    2. 问题是否清晰无歧义
-                    3. 问题难度是否适合大学生的学术水平
-                    4. 问题是否避免了重复且具有评估价值
-                    5. 问题格式是否符合输出要求
-                
-                    请确保你生成的问题符合上述所有要求，这将直接影响考核的质量和公平性。
-                """;
     }
 
     // 构建系统指令（稳定的部分）

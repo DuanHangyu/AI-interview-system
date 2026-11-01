@@ -38,15 +38,6 @@ public class FileController {
         return ossClientUtils.getSignedUrl(url);
     }
 
-    @GetMapping("/generate-upload-url")
-    @Operation(summary = "生成上传URL")
-    public UploadDTO generateUploadUrl(@RequestParam("fileName") String fileName,
-                                       @RequestParam("contentType") String contentType) {
-        String fileUrl = ossClientUtils.getFileName(fileName);
-        String signedUrl = ossClientUtils.getSignedPutUrl(fileUrl, contentType);
-        return new UploadDTO(signedUrl, fileUrl, fileName);
-    }
-
     @GetMapping("/preview")
     @Operation(summary = "预览文件")
     public void preview(@RequestParam("fileUrl") String fileUrl,

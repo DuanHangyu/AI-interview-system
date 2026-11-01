@@ -8,23 +8,3 @@ export function getProjectTypeList() {
     });
 }
 
-
-// 创建项目类型
-export function createProjectType(data: Recordable) {
-    return request({
-        url: "/project-type/create",
-        method: "post",
-        data
-    });
-}
-
-
-// 删除项目类型
-export function deleteProjectType(data: Recordable) {
-    return request({
-        url: "/project-type/delete",
-        method: "post",
-        data
-    });
-}
-

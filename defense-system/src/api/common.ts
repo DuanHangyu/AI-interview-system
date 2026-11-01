@@ -35,15 +35,6 @@ export function getFileSign(params: Record<string, any>) {
   });
 }
 
-// 生成上传URL
-export function generateUploadUrl(data: Record<string, any>) {
-  return request({
-    url: "/file/generate-upload-url",
-    method: "get",
-    data,
-  });
-}
-
 // 预览文件
 export function previewFile(fileUrl: string) {
   return request({

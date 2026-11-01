@@ -10,7 +10,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,34 +40,6 @@ import java.util.stream.Collectors;
 public class AssessmentAppService {
 
     private static final Object OBJECT = new Object();
-
-    private static final String PROMPT = """
-                请根据以下条件进行出题
-                
-                【上下文】
-                 识别所有pdf文件内容，作为此次考核的上下文内容
-                
-                【考核标准】
-                 %s
-                
-                【题库】
-                 %s
-                
-                【是否使用题库】
-                 %s
-                
-                【是否追问】
-                 %s
-                
-                【追问标准】
-                 %s
-
-                【出题要求】
-                - 识别考核标准，获取每一项考核维度
-                - 如果使用题库，则对每一个维度从题库中获取符合该维度的题目生成20个题目，如果每个维度从题库中获取的题目不足20个，则可以生成
-                - 如果不使用题库，出题时需要结合考核标准与上下文，对考核标准中的每一个考核维度出20个题目
-                - 如果使用追问，则生成的追问问题需要符合追问标准
-                """;
 
     private static final ThreadPoolExecutor EXECUTOR = new ThreadPoolExecutor(4, 10, 1000, TimeUnit.SECONDS, new ArrayBlockingQueue<>(1000), new ThreadPoolExecutor.DiscardPolicy());
 
@@ -322,15 +293,6 @@ public class AssessmentAppService {
         }
         // 如果没有数据，返回空分页对象
         return new Page<>(pagingQuery.getPage(), pagingQuery.getSize(), poPage.getTotal());
-    }
-
-    private FileDTO convertToFileDTO(String fileString) {
-        if (StringUtils.isBlank(fileString)) {
-            return null;
-        }
-        FileDTO file = JSONUtil.toBean(fileString, FileDTO.class);
-        file.setPresignedUrl(ossManager.getSignedUrl(file.getFileUrl()));
-        return file;
     }
 
 

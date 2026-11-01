@@ -20,8 +20,6 @@ CREATE TABLE `user` (
   `phone` VARCHAR(32) DEFAULT NULL,
   `type` INT DEFAULT NULL COMMENT '0=student,1=teacher,2=admin',
   `school_class` VARCHAR(255) DEFAULT NULL,
-  `ability_advantage_analysis` TEXT,
-  `development_potential_assessment` TEXT,
   `create_time` DATETIME DEFAULT NULL,
   `update_time` DATETIME DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -92,15 +90,6 @@ CREATE TABLE `assessment_student_relation` (
   PRIMARY KEY (`id`),
   KEY `idx_asr_assessment_id` (`assessment_id`),
   KEY `idx_asr_student_id` (`student_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ---------- lock_key ----------
-DROP TABLE IF EXISTS `lock_key`;
-CREATE TABLE `lock_key` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `lock_key_name` VARCHAR(255) DEFAULT NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_lock_key_name` (`lock_key_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- project_type ----------

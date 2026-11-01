@@ -42,10 +42,6 @@ public class UserPO {
 
     private String schoolClass;
 
-    private String abilityAdvantageAnalysis;
-
-    private String developmentPotentialAssessment;
-
     private LocalDateTime createTime;
 
     private LocalDateTime updateTime;

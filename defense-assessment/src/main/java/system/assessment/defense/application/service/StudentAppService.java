@@ -3,32 +3,25 @@ package system.assessment.defense.application.service;
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.jetbrains.annotations.NotNull;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import system.assessment.defense.application.dto.*;
-import system.assessment.defense.application.manage.OpenAiManager;
 import system.assessment.defense.domain.entity.TeacherSummary;
 import system.assessment.defense.domain.event.StudentCreateEvent;
-import system.assessment.defense.infrastructure.common.FileByteDTO;
-import system.assessment.defense.infrastructure.common.HttpUtils;
 import system.assessment.defense.infrastructure.emuns.ErrorCodeEnums;
 import system.assessment.defense.infrastructure.emuns.UserRoleEnums;
 import system.assessment.defense.infrastructure.exception.BusinessException;
 import system.assessment.defense.infrastructure.repository.dao.po.*;
 import system.assessment.defense.infrastructure.repository.dao.service.*;
 
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
@@ -44,18 +37,11 @@ public class StudentAppService {
 
     private final UserService userService;
 
-    private final AssessmentSettingService settingService;
-
     private final StudentAssessmentAppointmentService appointmentService;
 
     private final AssessmentStudentRelationService relationService;
 
     private final StudentAssessmentRecordService recordService;
-
-
-    private final OpenAiManager openAiManager;
-
-    private final HttpUtils httpUtils;
 
     private final StudentAssessmentQuestionAnswerService questionAnswerService;
 
@@ -158,20 +144,6 @@ public class StudentAppService {
         return true;
     }
 
-    @NotNull
-    private static List<AssessmentStudentRelationPO> getAssessmentStudentRelationPOS(List<UserPO> studentPos, List<AssessmentSettingPO> settings) {
-        List<AssessmentStudentRelationPO> relations = new ArrayList<>(studentPos.size() * settings.size());
-        for (AssessmentSettingPO setting : settings) {
-            for (UserPO studentPo : studentPos) {
-                AssessmentStudentRelationPO relationPO = new AssessmentStudentRelationPO();
-                relationPO.setAssessmentId(setting.getId());
-                relationPO.setStudentId(studentPo.getId());
-                relations.add(relationPO);
-            }
-        }
-        return relations;
-    }
-
     private void checkImportStudent(List<StudentExcelDTO> students) {
         for (StudentExcelDTO student : students) {
             if (StrUtil.isBlank(student.getName())) {
@@ -208,118 +180,11 @@ public class StudentAppService {
                 .toList();
     }
 
-//    @Scheduled(cron = "0 0 * * * ?")
-    public void batchAnalysisUserInfo() {
-        List<UserPO> allStudents = userService.list(Wrappers.lambdaQuery(UserPO.class)
-                .eq(UserPO::getType, 0));
-        List<Integer> studentIds = allStudents.stream().map(UserPO::getId).toList();
-        List<StudentAssessmentRecordPO> records = recordService.findbyStudentIds(studentIds);
-        Map<Integer, Optional<StudentAssessmentRecordPO>> studentRecordMap = records.stream().collect(Collectors.groupingBy(StudentAssessmentRecordPO::getStudentId, Collectors.maxBy((o1, o2) -> o2.getCreateTime().compareTo(o1.getCreateTime()))));
-
-        List<Integer> analysisStudentIds = new ArrayList<>();
-        for (UserPO student : allStudents) {
-            Integer studentId = student.getId();
-            Optional<StudentAssessmentRecordPO> recordOp = studentRecordMap.get(studentId);
-            if (recordOp == null) {
-                continue;
-            }
-            LocalDateTime updateTime = student.getUpdateTime();
-            if (recordOp.isPresent()) {
-                StudentAssessmentRecordPO record = recordOp.get();
-                if (record.getCreateTime().isAfter(updateTime)) {
-                    analysisStudentIds.add(student.getId());
-                }
-            }
-        }
-        if (CollectionUtils.isEmpty(analysisStudentIds)) {
-            return;
-        }
-        batchAnalysisUserInfo(analysisStudentIds);
-    }
-
-    private void batchAnalysisUserInfo(List<Integer> studentIds) {
-        List<StudentAssessmentRecordPO> studentAssessments = recordService.findbyStudentIds(studentIds);
-        Map<Integer, List<StudentAssessmentRecordPO>> assessmentStudentIdMap = studentAssessments.stream().collect(Collectors.groupingBy(StudentAssessmentRecordPO::getStudentId));
-        for (Integer studentId : studentIds) {
-            analysisUserInfo(studentId, assessmentStudentIdMap.get(studentId));
-        }
-    }
-
-    private static final String STUDENT_ANALYSIS_SCHEMA = """
-            {
-              "type": "object",
-              "required": ["abilityAdvantageAnalysis", "developmentPotentialAssessment"],
-              "additionalProperties": false,
-              "properties": {
-                "abilityAdvantageAnalysis": {
-                  "type": "string",
-                  "description": "能力优势分析"
-                },
-                "developmentPotentialAssessment": {
-                  "type": "string",
-                  "description": "发展潜力评估"
-                }
-              }
-            }
-            """;
-
-    private void analysisUserInfo(Integer studentId, List<StudentAssessmentRecordPO> recordPOS) {
-        try {
-            StringBuilder promptBuilder = new StringBuilder("请根据学生的答辩结果（如果答辩结果为空，则不参与评估），对学生进行评估，生成能力优势分析和发展潜力评估").append("\n");
-            promptBuilder.append("【答辩结果】：").append("\n");
-            if (CollectionUtils.isNotEmpty(recordPOS)) {
-                int index = 1;
-                for (StudentAssessmentRecordPO recordPO : recordPOS) {
-                    promptBuilder.append(index++).append(":").append(recordPO.getDefenseResult()).append("\n");
-                }
-            }
-
-            String text;
-            text = openAiManager.chatCompletionWithSchema(
-                    openAiManager.getTextModel(),
-                    "你是一位大学评估专家，请使用简体中文进行回答",
-                    promptBuilder.toString(),
-                    "student_analysis",
-                    STUDENT_ANALYSIS_SCHEMA
-            );
-
-            StudentAnalysis analysis = JSONUtil.toBean(text, StudentAnalysis.class);
-            userService.update(Wrappers.lambdaUpdate(UserPO.class)
-                    .set(UserPO::getAbilityAdvantageAnalysis, analysis.getAbilityAdvantageAnalysis())
-                    .set(UserPO::getDevelopmentPotentialAssessment, analysis.getDevelopmentPotentialAssessment())
-                    .eq(UserPO::getId, studentId));
-        } catch (Exception e) {
-            log.error("分析学生信息异常", e);
-        }
-    }
-
-    private String getMimeType(String fileName) {
-        String extendName = fileName.substring(fileName.lastIndexOf(".") + 1);
-        return switch (extendName) {
-            case "jpg", "jpeg" -> "image/jpeg";
-            case "png" -> "image/png";
-            case "gif" -> "image/gif";
-            case "pdf" -> "application/pdf";
-            case "doc", "docx" -> "application/msword";
-            case "xls", "xlsx" -> "application/vnd.ms-excel";
-            case "tex" -> "application/x-tex";
-            default -> "application/octet-stream";
-        };
-    }
-
     public List<StudentDTO> allStudent() {
         return userService.list(Wrappers.lambdaQuery(UserPO.class)
                 .eq(UserPO::getType, 0))
                 .stream()
                 .map(studentPO -> BeanUtil.copyProperties(studentPO, StudentDTO.class))
                 .toList();
-    }
-
-    @Data
-    private static class StudentAnalysis {
-
-        private String abilityAdvantageAnalysis;
-
-        private String developmentPotentialAssessment;
     }
 }

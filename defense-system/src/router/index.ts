@@ -26,14 +26,14 @@ export const studnetRoutes = [
         path: "/dashboard",
         name: "Dashboard",
         component: () =>
-          import(/* webpackPreload: true */ "@/views/studentDashboard/defense/index2.vue"),
+          import(/* webpackPreload: true */ "@/views/studentDashboard/defense/index.vue"),
         meta: { role: ["student"] },
       },
       {
         path: "/question",
         name: "QuestionPage",
         component: () =>
-          import(/* webpackPrefetch: true */ "@/views/studentDashboard/questions/index2.vue"),
+          import(/* webpackPrefetch: true */ "@/views/studentDashboard/questions/index.vue"),
           // import(/* webpackPrefetch: true */ "@/views/QuestionPage.vue"),
         meta: { role: ["student"] },
       },

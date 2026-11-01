@@ -111,18 +111,6 @@ public class AssessmentSettingPO {
         return followUpPrompt;
     }
 
-    public boolean defenseAndQuestion(){
-        return defense && question;
-    }
-
-    public boolean onlyDefense(){
-        return !question && defense;
-    }
-
-    public boolean onlyQuestion(){
-        return question && !defense;
-    }
-
     public AssessmentAppointmentSettingPO findAppointmentSetting(LocalDateTime timePeriod) {
         if (CollectionUtils.isEmpty(appointmentSettingList)) {
             return null;

@@ -74,11 +74,3 @@ export function getSchoolClassStudent() {
     method: "get",
   });
 }
-
-// 获取所有学生
-export function getAllStudent() {
-  return request({
-    url: "/backend/student/all",
-    method: "get",
-  });
-}

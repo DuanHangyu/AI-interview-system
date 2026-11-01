@@ -119,16 +119,6 @@ public class OssManager {
         return httpUrl.replace("http://", "https://");
     }
 
-    public String getSignedPutUrl(String url, String contentType) {
-        // 设置URL过期时间（单位：毫秒，建议30分钟）现在设置为6小时
-        Date expiration = new Date(System.currentTimeMillis() + 6 * 60 * 60 * 1000);
-        GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucketName, url, HttpMethod.PUT);
-        request.setContentType(contentType);
-        request.setExpiration(expiration);
-        String httpUrl = ossClient.generatePresignedUrl(request).toString();
-        return httpUrl.replace("http://", "https://");
-    }
-
     public void preview(String fileKey, HttpServletRequest request, HttpServletResponse response) throws IOException {
         try {
 

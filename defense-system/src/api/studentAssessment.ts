@@ -54,15 +54,6 @@ export function uploadAssessmentFile(data: any) {
   });
 }
 
-// 保存答辩答案
-export function saveAnswer(data: any) {
-  return request({
-    url: "/front/student-assessment/save-answer",
-    method: "post",
-    data,
-  });
-}
-
 // 预约考核
 export function appointment(data: any) {
   return request({

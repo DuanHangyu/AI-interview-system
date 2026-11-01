@@ -6,7 +6,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.*;
 import system.assessment.defense.application.dto.*;
-import system.assessment.defense.application.dto.backed.TeacherModifyPasswordCmd;
 import system.assessment.defense.application.service.TeacherAppService;
 
 import java.util.List;
@@ -51,11 +50,5 @@ public class TeacherBackendController {
     @Operation(summary = "获取所有教师")
     public List<TeacherDTO> allTeacher(){
         return teacherAppService.allTeacher();
-    }
-
-    @PostMapping("/modify-password")
-    @Operation(summary = "修改密码")
-    public Boolean modifyPassword(@RequestBody TeacherModifyPasswordCmd modifyPasswordCmd){
-        return teacherAppService.modifyPassword(modifyPasswordCmd);
     }
 }

@@ -1,6 +1,5 @@
 package system.assessment.defense.infrastructure.common;
 
-import com.alicp.jetcache.anno.CacheRefresh;
 import com.alicp.jetcache.anno.CacheType;
 import com.alicp.jetcache.anno.Cached;
 import lombok.RequiredArgsConstructor;
@@ -52,36 +51,6 @@ public class HttpUtils {
             return new FileByteDTO(bytes);
         } catch (Exception e) {
             log.error("Failed to download image, fileUrl:{}", fileUrl, e);
-            return null;
-        }
-    }
-
-    @Cached(name = "file_",
-            key = "#fileUrl",
-            localExpire = 300, localLimit = 1000,
-            expire = 600,
-            cacheType = CacheType.BOTH)
-    @CacheRefresh(refresh = 150, stopRefreshAfterLastAccess = 7200)
-    public FileByteDTO downloadQuestionVoice(String fileUrl) {
-        String signedUrl = ossManger.getSignedUrl(fileUrl);
-        Request request = new Request.Builder()
-                .url(signedUrl)
-                .build();
-
-        try (Response response = okHttpClient.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                throw new IOException("Failed to download image: " + response);
-            }
-
-            ResponseBody body = response.body();
-            if (body == null) {
-                throw new IOException("Response body is null");
-            }
-            byte[] bytes = body.bytes();
-            log.info("Download file success fileUrl:{}, fileSize:{}", fileUrl, bytes.length);
-            return new FileByteDTO(bytes);
-        } catch (IOException e) {
-            log.error("Failed to download image", e);
             return null;
         }
     }

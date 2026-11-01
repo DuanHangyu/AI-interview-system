@@ -53,7 +53,6 @@
 - ECharts
 - Tailwind CSS
 - Axios
-- PDF.js
 - XGPlayer
 
 ### 后端

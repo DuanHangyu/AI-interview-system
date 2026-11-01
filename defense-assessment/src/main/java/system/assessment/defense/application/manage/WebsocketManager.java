@@ -77,10 +77,6 @@ public class WebsocketManager {
         return TEXT_SESSIONS.get(userId);
     }
 
-    public static WebSocketSession getVoiceSession(Integer userId) {
-        return VOICE_SESSIONS.get(userId);
-    }
-
     public static WebSocketSession getVoicePlaySession(Integer userId) {
         return VOICE_PLAY_SESSIONS.get(userId);
     }

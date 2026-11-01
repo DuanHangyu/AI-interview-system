@@ -1,20 +1,21 @@
 <template>
   <main
-    class="size-full px-9 pt-6 pb-8 defense flex flex-col overflow-hidden relative min-w-[1500px]"
+    class="size-full px-4 xl:px-9 pt-6 pb-8 defense flex flex-col overflow-auto relative"
   >
-    <div class="min-w-[1450px] w-full flex-shrink-0">
+    <div class="defense-header-bar w-full flex-shrink-0">
       <DefenseHeader class="w-full" />
     </div>
     <div class="flex-grow w-full flex items-center justify-center">
       <div
-        class="flex mt-4 max-h-[800px] max-w-[1450px] h-full w-full relative"
+        class="defense-stage flex mt-4 max-h-[800px] max-w-[1450px] h-full w-full relative"
       >
         <section
           v-show="showArr?.[0] == 1"
-          class="w-[800px] h-full bg-[rgba(0,0,0,0.15)] rounded-[32px] mr-4 relative overflow-hidden flex-shrink-0 fade-in"
+          class="question-voice-panel w-[800px] h-full bg-[rgba(0,0,0,0.15)] rounded-[32px] mr-4 relative overflow-hidden flex-shrink-0 fade-in"
         >
           <InterviewVoicePlayer
             ref="voicePlayerRef"
+            :playback-enabled="voicePlaybackEnabled"
             @ready="onVoicePlayerReady"
             @playing="updatePlaying"
             @broadcastingEnd="broadcastingEnd"
@@ -23,7 +24,7 @@
         </section>
         <section
           v-show="showArr?.[1] == 2"
-          class="flex-grow max-h-[528px] h-full bg-[rgba(123,123,123,0.5)] rounded-[32px] flex flex-col p-4 fade-in videoBox"
+          class="question-video-panel flex-grow max-h-[528px] h-full bg-[rgba(123,123,123,0.5)] rounded-[32px] flex flex-col p-4 fade-in videoBox"
         >
           <div
             class="flex-grow w-full rounded-[32px] overflow-hidden relative flex justify-center"
@@ -57,7 +58,7 @@
               </div>
             </div>
             <div
-              class="w-[140px] h-[50px] bg-[rgba(255,255,255,0.15)] hover:bg-[rgba(255,255,255,0.3)] hover:scale-105 cursor-pointer flex items-center justify-center text-lg font-medium text-white flex-shrink-0 rounded-[693px]"
+              class="question-main-action w-[140px] h-[50px] bg-[rgba(255,255,255,0.15)] hover:bg-[rgba(255,255,255,0.3)] hover:scale-105 cursor-pointer flex items-center justify-center text-lg font-medium text-white flex-shrink-0 rounded-[693px]"
               @click="endQuestionEarly"
             >
               提前结束{{
@@ -72,7 +73,7 @@
         </section>
         <section
           v-show="showArr?.[2] == 3"
-          class="absolute bottom-[-10px] left-0 w-full bottom-card flex flex-col fade-in"
+          class="question-bottom-panel absolute bottom-[-10px] left-0 w-full bottom-card flex flex-col fade-in"
         >
           <div class="flex space-x-4 mb-4 items-end">
             <img
@@ -101,22 +102,17 @@
                   )
                 "
               ></div>
-              <template
-                v-if="questionList?.[questionList?.length - 1]?.follow?.length"
-              >
+              <template v-if="questionList?.[questionList?.length - 1]?.follow">
                 <div class="text-[32px] font-semibold mt-3">追问</div>
                 <div
-                  class="mt-2 leading-7 space-y-2"
-                  v-for="(item, index) in questionList?.[
-                    questionList?.length - 1
-                  ]?.follow"
-                  :key="index"
-                >
-                  <div
-                    class="leading-7"
-                    v-html="calcRender(item?.title || '')"
-                  ></div>
-                </div>
+                  class="mt-2 leading-7"
+                  v-html="
+                    calcRender(
+                      questionList?.[questionList?.length - 1]?.follow?.title ||
+                        ''
+                    )
+                  "
+                ></div>
               </template>
             </div>
           </div>
@@ -125,10 +121,29 @@
     </div>
     <!-- 加载遮罩层 -->
     <LoadingOverlay
-      v-if="!isReady || !isVoiceReady || isGenQuestion || endAnswerLoading"
-      :text="'正在加载中，请稍后...'"
+      v-if="showLoading"
+      :text="loadingText"
       :bg="isFirstShow ? 'rgba(95, 90, 87, 1)' : 'rgba(95, 90, 87, 0.8)'"
     />
+    <div
+      v-if="blockingError"
+      class="absolute inset-0 z-50 flex items-center justify-center bg-[rgba(95,90,87,0.86)]"
+    >
+      <div
+        class="w-[460px] max-w-[90vw] rounded-2xl bg-white/95 px-8 py-7 text-center shadow-2xl"
+      >
+        <div class="text-xl font-semibold text-[#1f2937] mb-3">面试连接异常</div>
+        <div class="text-base leading-7 text-[#4b5563] whitespace-pre-line">
+          {{ blockingError }}
+        </div>
+        <button
+          class="mt-6 h-11 px-8 rounded-full bg-[#e75f49] text-white text-base font-medium hover:bg-[#f07157]"
+          @click="retryBlockedStep"
+        >
+          重试
+        </button>
+      </div>
+    </div>
   </main>
 </template>
 <script setup lang="ts">
@@ -144,27 +159,21 @@ import { getToken } from "@/utils/auth";
 import WaveComponent from "@/components/Wave/index.vue";
 import MarkdownIt from "markdown-it";
 import hljs from "markdown-it-highlightjs";
-import {
-  endAnswer,
-  endAssessment,
-  generateQuestionApi,
-  startAnswer,
-  startAssessmentApi,
-} from "@/api/kh";
 const md = new MarkdownIt().use(hljs);
 const calcRender = computed(() => (e: string) => {
   return md.render(e);
 });
 const {
-  transcriptionText,
   initAudio,
   startAudio,
   stopAudio,
   closeAudio,
-  startHeartbeat,
-  restartAudio,
   volumeLevel,
-} = useSpeechRecognition();
+  audioReady,
+  audioError,
+} = useSpeechRecognition({
+  onConnectionLost: handleAnswerAudioConnectionLost,
+});
 const questionContainer = ref();
 
 const showArr = ref<number[]>([]);
@@ -182,17 +191,225 @@ const questionList = ref<Recordable[]>([]);
 const isReady = ref(false);
 const isVoiceReady = ref(false);
 const isGenQuestion = ref(false);
+const voicePlaybackEnabled = ref(false);
 const audioStatus = ref(false);
-const endAnswerLoading = ref(false);
+const blockingError = ref("");
+const blockedStep = ref<"setup" | "generate" | "answer">("setup");
+const loadingText = ref("正在加载中，请稍后...");
+const showLoading = computed(
+  () =>
+    !blockingError.value &&
+    (!isReady.value || !isVoiceReady.value || !isConnected.value || isGenQuestion.value)
+);
 let voiceFallbackTimer: number | undefined = undefined;
+let generateRetryTimer: number | undefined = undefined;
+const mediaRequestTimeoutMs = 10000;
+
+// 心跳间隔（毫秒）
+const HEARTBEAT_INTERVAL = 5000; // 30秒
+let heartbeatTimer: number | undefined = undefined;
+const reconnectAttempts = ref(0);
+const maxReconnectAttempts = 5;
+const reconnectInterval = 3000; // 3秒重试一次
+let reconnectTimer: number | undefined = undefined;
+const socket = ref<WebSocket | null>(null);
+const isConnected = ref(false);
+const connectionStatus = ref("Disconnected");
+const pageOff = ref(false);
 
 const isPlaying = ref(false);
+
+function resetLoadingText() {
+  loadingText.value = "正在加载中，请稍后...";
+}
+
+function clearGenerateRetryTimer() {
+  if (generateRetryTimer) {
+    clearTimeout(generateRetryTimer);
+    generateRetryTimer = undefined;
+  }
+}
+
+function setBlockingError(messageText: string, step: "setup" | "generate" | "answer" = "generate") {
+  clearVoiceFallbackTimer();
+  clearGenerateRetryTimer();
+  voicePlaybackEnabled.value = false;
+  isGenQuestion.value = false;
+  blockingError.value = messageText;
+  blockedStep.value = step;
+}
+
+function clearBlockingError() {
+  blockingError.value = "";
+  resetLoadingText();
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function requestVideoWithTimeout() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return Promise.reject(new Error("当前浏览器不支持摄像头访问"));
+  }
+
+  let finished = false;
+  let timeoutId: number | undefined = undefined;
+  const timeoutMessage = "摄像头权限响应超时，请确认浏览器权限弹窗后重试。";
+  const mediaRequest = navigator.mediaDevices
+    .getUserMedia({ video: true })
+    .then((stream) => {
+      if (finished) {
+        stream.getTracks().forEach((track) => track.stop());
+        throw new Error(timeoutMessage);
+      }
+      return stream;
+    });
+
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = window.setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, mediaRequestTimeoutMs);
+  });
+
+  return Promise.race([mediaRequest, timeout]).finally(() => {
+    finished = true;
+    if (timeoutId) {
+      window.clearTimeout(timeoutId);
+    }
+  });
+}
+
+function handleAnswerAudioConnectionLost() {
+  if (pageOff.value || !audioStatus.value) {
+    return false;
+  }
+  clearInterval(answerTimer);
+  answerTimer = undefined;
+  audioStatus.value = false;
+  isGenQuestion.value = false;
+  answerTime.value = detail.value?.answerTime || answerTime.value;
+  setBlockingError(
+    "录音连接中断，本轮回答未保存。请检查网络和麦克风后点击重试，重新回答当前题目。",
+    "answer"
+  );
+  message.error("录音连接中断，请重新回答当前题目");
+  return false;
+}
+
+function clearTextHeartbeat() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = undefined;
+  }
+}
+
+function isTextSocketOpen() {
+  return socket.value?.readyState === WebSocket.OPEN;
+}
+
+function sendAssessmentAction(action: string) {
+  if (!isTextSocketOpen()) {
+    setBlockingError("面试连接已断开，请重试连接后继续。", "setup");
+    connect();
+    return false;
+  }
+  socket.value?.send(
+    JSON.stringify({
+      message: route.query?.id,
+      action,
+    })
+  );
+  return true;
+}
+
+function scheduleGenerateRetry() {
+  if (generateRetryTimer) {
+    return;
+  }
+  generateRetryTimer = setTimeout(() => {
+    generateRetryTimer = undefined;
+    if (isConnected.value && isGenQuestion.value && !blockingError.value) {
+      generateQuestions();
+    }
+  }, 2000);
+}
+
+function parseQuestionContent(content: unknown) {
+  if (typeof content !== "string" || !content.includes("title")) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(content);
+    return parsed?.title ? parsed : null;
+  } catch (error) {
+    console.warn("题目消息解析失败", error, content);
+    return null;
+  }
+}
+
+async function restartCurrentAnswer() {
+  clearBlockingError();
+  isGenQuestion.value = false;
+  if (audioStatus.value) {
+    stopAudio();
+    audioStatus.value = false;
+  }
+  const started = await startAudio();
+  if (!started) {
+    setBlockingError(audioError.value || "录音服务连接失败，请检查网络后重试。", "setup");
+    return;
+  }
+  audioStatus.value = true;
+  startAnswerQuestions();
+}
+
+async function retryBlockedStep() {
+  const step = blockedStep.value;
+  clearBlockingError();
+
+  if (step === "setup") {
+    const audioOk = audioReady.value || (await initAudio());
+    if (!audioOk) {
+      setBlockingError(audioError.value || "无法打开麦克风，请允许浏览器麦克风权限后重试。", "setup");
+      return;
+    }
+    const cameraOk = videoStream || (await startCamera());
+    if (!cameraOk) {
+      return;
+    }
+    if (!isConnected.value) {
+      connect();
+    }
+    return;
+  }
+
+  if (step === "answer") {
+    await restartCurrentAnswer();
+    return;
+  }
+
+  markQuestionPending();
+  if (questionList.value.length === 0) {
+    startAssessment();
+  } else {
+    generateQuestions();
+  }
+}
 
 function clearVoiceFallbackTimer() {
   if (voiceFallbackTimer) {
     clearTimeout(voiceFallbackTimer);
     voiceFallbackTimer = undefined;
   }
+}
+
+function markQuestionPending(text?: string) {
+  voicePlaybackEnabled.value = false;
+  if (text) {
+    loadingText.value = text;
+  }
+  isGenQuestion.value = true;
 }
 
 function scheduleVoiceFallbackStart() {
@@ -211,30 +428,217 @@ const updatePlaying = (e: boolean) => {
   if (e) {
     clearVoiceFallbackTimer();
   }
+  // if (isPlaying.value == false) {
+  //   if (audioStatus.value) {
+  //     stopAudio();
+  //     audioStatus.value = false;
+  //   }
+  //   startAudio();
+  //   audioStatus.value = true;
+  //   startAnswerQuestions();
+  // }
 };
 
-const broadcastingEnd = () => {
+const broadcastingEnd = async () => {
   clearVoiceFallbackTimer();
+  voicePlaybackEnabled.value = false;
   if (audioStatus.value) {
     stopAudio();
     audioStatus.value = false;
   }
-  startAudio();
+  const started = await startAudio();
+  if (!started) {
+    setBlockingError(audioError.value || "录音服务连接失败，请检查网络后重试。", "setup");
+    return;
+  }
   audioStatus.value = true;
   startAnswerQuestions();
 };
 
+const connect = () => {
+  clearTextHeartbeat();
+  if (socket.value) {
+    socket.value?.close();
+  }
+  // 清除之前的重连定时器
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = undefined;
+  }
+  if (reconnectAttempts.value >= maxReconnectAttempts && !isConnected.value) {
+    connectionStatus.value = `Failed after ${maxReconnectAttempts} attempts`;
+    setBlockingError(
+      "面试连接已断开，请检查网络后点击重试继续。",
+      audioStatus.value ? "answer" : "setup"
+    );
+    return;
+  }
+  connectionStatus.value = "Connecting...";
+
+  // 创建 WebSocket 连接
+  const currentSocket = new WebSocket(
+    process.env.VUE_APP_BASE_TEXT_WS,
+    getToken() || ""
+  );
+  socket.value = currentSocket;
+
+  currentSocket.onopen = () => {
+    if (socket.value !== currentSocket) {
+      return;
+    }
+    connectionStatus.value = "Connected";
+    isConnected.value = true;
+    reconnectAttempts.value = 0; // 重置重连计数器
+    clearTextHeartbeat();
+    console.log("WebSocket connected");
+    heartbeatTimer = setInterval(() => {
+      if (socket.value === currentSocket && currentSocket.readyState === WebSocket.OPEN) {
+        currentSocket.send(JSON.stringify({ action: "ping" }));
+      }
+    }, HEARTBEAT_INTERVAL);
+  };
+
+  currentSocket.onmessage = (event) => {
+    let msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch (error) {
+      console.warn("WebSocket 消息解析失败", error, event.data);
+      return;
+    }
+    console.log(msg);
+    const contentText = String(msg?.content || "");
+    if (msg?.normalMessage) {
+      if (contentText == "考核结束") {
+        router.push({
+          name: "ResultOverPage",
+          query: route.query,
+        });
+      } else if (contentText.includes("题目生成失败")) {
+        setBlockingError(contentText, "generate");
+        message.error(contentText);
+      } else if (contentText.includes("题目正在生成中")) {
+        markQuestionPending(contentText);
+        scheduleGenerateRetry();
+      } else if (contentText.includes("正在生成")) {
+        markQuestionPending(contentText);
+      } else if (contentText.includes("题目生成完成")) {
+        clearGenerateRetryTimer();
+        generateQuestions();
+      } else {
+        const content = parseQuestionContent(contentText);
+        if (content) {
+          if (content?.title == "结束问答") {
+            overAssessment();
+          } else {
+            clearBlockingError();
+            clearGenerateRetryTimer();
+            // if (audioStatus.value) {
+            //   stopAudio();
+            //   audioStatus.value = false;
+            // }
+            // startAudio();
+            // audioStatus.value = true;
+            if (content?.follow) {
+              questionList.value[questionList.value?.length - 1].follow =
+                content;
+              try {
+                if (questionContainer.value) {
+                  nextTick(() => {
+                    questionContainer.value.scrollTop =
+                      questionContainer.value.scrollHeight;
+                  });
+                }
+              } catch (error) {}
+            } else {
+              questionList.value?.push(content);
+            }
+            nextTick(() => {
+              isGenQuestion.value = false;
+              voicePlaybackEnabled.value = true;
+              scheduleVoiceFallbackStart();
+            });
+            // startAnswerQuestions();
+          }
+        }
+      }
+    } else {
+      isGenQuestion.value = false;
+      if (contentText == "考核已完成") {
+        // router.push({
+        //   name: "ResultOverPage",
+        //   query: route.query,
+        // });
+      } else if (contentText.includes("重新回答") || contentText.includes("录音数据")) {
+        message.error(contentText);
+        blockedStep.value = "answer";
+        restartCurrentAnswer();
+      } else {
+        message.error(contentText);
+      }
+    }
+  };
+
+  currentSocket.onerror = (error: any) => {
+    if (socket.value !== currentSocket) {
+      return;
+    }
+    console.error("WebSocket error:", error);
+    connectionStatus.value = "Error: " + error.message;
+    attemptReconnect();
+    isConnected.value = false;
+  };
+
+  currentSocket.onclose = () => {
+    if (socket.value !== currentSocket) {
+      return;
+    }
+    clearTextHeartbeat();
+    connectionStatus.value = "Disconnected";
+    isConnected.value = false;
+    if (!pageOff.value) {
+      attemptReconnect();
+    }
+    console.log("WebSocket disconnected");
+  };
+};
+// 尝试重新连接
+const attemptReconnect = () => {
+  if (isConnected.value || reconnectTimer) {
+    return;
+  }
+  if (reconnectAttempts.value >= maxReconnectAttempts) {
+    setBlockingError(
+      "面试连接已断开，请检查网络后点击重试继续。",
+      audioStatus.value ? "answer" : "setup"
+    );
+    return;
+  }
+  reconnectAttempts.value += 1;
+  connectionStatus.value = `Attempting to reconnect (${reconnectAttempts.value}/${maxReconnectAttempts})...`;
+
+  reconnectTimer = setTimeout(() => {
+    connect();
+  }, reconnectInterval);
+};
+
 async function startCamera() {
   try {
-    videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+    videoStream = await requestVideoWithTimeout();
     if (videoRef.value) {
       videoRef.value.srcObject = videoStream;
       videoRef.value.onloadedmetadata = () => {
         videoRef.value.play();
       };
     }
+    return true;
   } catch (err) {
     console.error("摄像头启动失败", err);
+    setBlockingError(
+      getErrorMessage(err, "无法打开摄像头，请允许浏览器摄像头权限后重试。"),
+      "setup"
+    );
+    return false;
   }
 }
 function stopCamera() {
@@ -244,6 +648,10 @@ function stopCamera() {
       .forEach((track: { stop: () => any }) => track.stop());
     videoStream = null;
   }
+}
+
+function startAssessment() {
+  return sendAssessmentAction("start-assessment");
 }
 
 function handleQuestionTimeout() {
@@ -260,11 +668,10 @@ function handleQuestionTimeout() {
 }
 
 function startAnswerQuestions() {
-  startAnswer({
-    assessmentId: route.query?.id,
-  }).then(() => {
-    handleQuestionTimeout();
-  });
+  if (!sendAssessmentAction("start-answer")) {
+    return;
+  }
+  handleQuestionTimeout();
 }
 
 function endQuestionEarly() {
@@ -272,7 +679,6 @@ function endQuestionEarly() {
   if (detail.value?.answerTime - answerTime.value < 4) {
     return;
   }
-
   if (audioStatus.value) {
     stopAudio();
     audioStatus.value = false;
@@ -280,59 +686,39 @@ function endQuestionEarly() {
   try {
     (voicePlayerRef.value as any)?.stopVoice?.();
   } catch (error) {}
+  voicePlaybackEnabled.value = false;
   clearInterval(answerTimer);
   answerTime.value = detail.value?.answerTime || 60;
-  endAnswerLoading.value = true;
-  endAnswer({
-    assessmentId: route.query?.id,
-  })
-    .then(() => {
-      generateQuestions();
-    })
-    .finally(() => {
-      endAnswerLoading.value = false;
-    });
+  markQuestionPending();
+  if (!sendAssessmentAction("end-answer")) {
+    isGenQuestion.value = false;
+  }
+  // if (
+  //   questionList.value?.[questionList?.value?.length - 1]?.index ==
+  //   detail.value?.questionCount
+  // ) {
+  //   overAssessment();
+  // } else {
+  //   generateQuestions();
+  // }
 }
 
 function generateQuestions() {
   clearVoiceFallbackTimer();
-  isGenQuestion.value = true;
+  // if (
+  //   questionList.value?.[questionList?.value?.length - 1]?.index >=
+  //   detail.value?.questionCount
+  // ) {
+  //   return;
+  // }
+  markQuestionPending();
   if (audioStatus.value) {
     stopAudio();
     audioStatus.value = false;
   }
-  generateQuestionApi({ assessmentId: route.query?.id })
-    .then((res) => {
-      const r: Recordable = res || {};
-      if (r?.code == 200) {
-        if (r.data?.last) {
-          overAssessment();
-        } else {
-          if (r.data?.follow) {
-            if (!questionList.value[questionList.value?.length - 1]?.follow) {
-              questionList.value[questionList.value?.length - 1].follow = [];
-            }
-            questionList.value[questionList.value?.length - 1].follow?.push({
-              title: r.data?.question,
-            });
-            try {
-              if (questionContainer.value) {
-                nextTick(() => {
-                  questionContainer.value.scrollTop =
-                    questionContainer.value.scrollHeight;
-                });
-              }
-            } catch (error) {}
-          } else {
-            questionList.value?.push({ title: r.data?.question });
-          }
-          scheduleVoiceFallbackStart();
-        }
-      }
-    })
-    .finally(() => {
-      isGenQuestion.value = false;
-    });
+  if (!sendAssessmentAction("generate_question")) {
+    isGenQuestion.value = false;
+  }
 }
 
 function overAssessment() {
@@ -342,13 +728,10 @@ function overAssessment() {
     stopAudio();
     audioStatus.value = false;
   }
-  endAssessment({
-    assessmentId: route.query?.id,
-  }).then((res) => {
-    router.push({
-      name: "ResultOverPage",
-      query: route.query,
-    });
+  sendAssessmentAction("end-assessment");
+  router.push({
+    name: "ResultOverPage",
+    query: route.query,
   });
 }
 
@@ -359,19 +742,35 @@ onMounted(() => {
       detail.value = res?.data || {};
       duration.value = res?.data?.duration || 0;
       answerTime.value = res?.data?.answerTime || 0;
-      await initAudio();
-      startHeartbeat();
-      await startCamera();
+      const audioOk = await initAudio();
+      if (!audioOk) {
+        setBlockingError(audioError.value || "无法打开麦克风，请允许浏览器麦克风权限后重试。", "setup");
+        return;
+      }
+      const cameraOk = await startCamera();
+      if (!cameraOk) {
+        return;
+      }
+      connect();
     }
   );
 });
 
 onUnmounted(() => {
+  pageOff.value = true;
   clearVoiceFallbackTimer();
+  clearGenerateRetryTimer();
   stopCamera();
-  // closeAudio();
+  closeAudio();
   clearInterval(answerTimer);
   clearInterval(durationTimer);
+  if (socket.value) {
+    socket.value.close();
+  }
+  clearTextHeartbeat();
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+  }
 });
 
 const onVoicePlayerReady = async () => {
@@ -380,33 +779,38 @@ const onVoicePlayerReady = async () => {
 
 const isFirst = ref(false);
 watch(
-  () => [isReady.value, isVoiceReady.value],
-  async ([ready, voiceReady]: any) => {
-    if (ready && voiceReady && !isFirst.value) {
+  () => [isReady.value, isVoiceReady.value, isConnected.value],
+  async ([ready, voiceReady, status]: any) => {
+    if (ready && voiceReady && status && !isFirst.value) {
       isFirst.value = true;
-      startAssessmentApi({
-        assessmentId: route.query?.id,
-      }).then(() => {
-        generateQuestions();
-      });
+      markQuestionPending();
+      if (!startAssessment()) {
+        isFirst.value = false;
+      }
     }
   }
 );
 
 const isFirstShow = ref(true);
 watch(
-  () => [isReady.value, isVoiceReady.value, isGenQuestion.value],
+  () => [
+    isReady.value,
+    isVoiceReady.value,
+    isConnected.value,
+    isGenQuestion.value,
+  ],
   () => {
-    if (!(!isReady.value || !isVoiceReady.value || isGenQuestion.value)) {
+    if (
+      !(
+        !isReady.value ||
+        !isVoiceReady.value ||
+        !isConnected.value ||
+        isGenQuestion.value
+      )
+    ) {
       if (isFirstShow.value) {
         isFirstShow.value = false;
-        showArr.value = [1];
-        setTimeout(() => {
-          showArr.value?.push(2);
-        }, 400);
-        setTimeout(() => {
-          showArr.value?.push(3);
-        }, 800);
+        showArr.value = [1, 2, 3];
       }
     }
   },
@@ -418,7 +822,9 @@ watch(
 </script>
 <style scoped>
 .defense {
-  background: #5f5a57;
+  background:
+    radial-gradient(circle at 82% 18%, rgba(244, 207, 85, 0.18), transparent 30%),
+    linear-gradient(180deg, #706f6b 0%, #5f5a57 100%);
 }
 .bottom-card {
   height: 265px;
@@ -565,5 +971,90 @@ video {
 
 .videoBox {
   height: calc(100% - 270px);
+}
+
+.defense-header-bar {
+  max-width: 1450px;
+  margin: 0 auto;
+}
+
+@media (max-width: 1100px) {
+  .defense {
+    height: auto;
+    min-height: 100dvh;
+    padding: 18px 16px 24px;
+  }
+
+  .defense-stage {
+    height: auto;
+    max-height: none;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .question-voice-panel,
+  .question-video-panel {
+    width: 100% !important;
+    min-height: 380px;
+    max-height: none;
+    margin-right: 0 !important;
+  }
+
+  .question-video-panel {
+    height: auto;
+  }
+
+  .question-bottom-panel {
+    position: relative !important;
+    bottom: auto !important;
+    left: auto !important;
+    min-height: 240px;
+    margin-top: 0;
+  }
+
+  .bottom-card {
+    height: auto;
+    min-height: 240px;
+  }
+}
+
+@media (max-width: 640px) {
+  .defense {
+    padding: 12px;
+  }
+
+  .question-voice-panel,
+  .question-video-panel {
+    min-height: 330px;
+    border-radius: 24px;
+  }
+
+  .question-video-panel {
+    padding: 12px;
+  }
+
+  .defense-action {
+    height: auto;
+    min-height: 112px;
+    flex-direction: column;
+    gap: 14px;
+    padding: 14px;
+    border-radius: 28px;
+  }
+
+  .question-main-action {
+    width: 100% !important;
+    max-width: 260px;
+  }
+
+  .bottom-card {
+    padding: 14px;
+    border-radius: 28px;
+  }
+
+  .bottom-card-in {
+    border-radius: 22px;
+    font-size: 18px;
+  }
 }
 </style>
