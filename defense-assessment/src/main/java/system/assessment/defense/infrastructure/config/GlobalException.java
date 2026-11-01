@@ -1,5 +1,6 @@
 package system.assessment.defense.infrastructure.config;
 
+import org.springframework.transaction.CannotCreateTransactionException;
 import cn.dev33.satoken.exception.NotLoginException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -27,7 +28,7 @@ public class GlobalException {
 
     @ExceptionHandler(BusinessException.class)
     public BaseResult<Void> handleException(BusinessException e){
-        log.error("e", e);
+        log.warn("business error, code:{}, message:{}", e.getCode(), e.getMessage());
         return BaseResult.error(e.getCode(), e.getMessage());
     }
 
@@ -46,7 +47,7 @@ public class GlobalException {
     @ExceptionHandler(Exception.class)
     public BaseResult<Void> handleException(Exception e){
         log.error("e", e);
-        if (hasCause(e, DataAccessResourceFailureException.class)) {
+        if (hasCause(e, DataAccessResourceFailureException.class) || hasCause(e, CannotCreateTransactionException.class)) {
             return BaseResult.error(500, DATABASE_CONNECTION_ERROR);
         }
         return BaseResult.error(500, "系统异常");

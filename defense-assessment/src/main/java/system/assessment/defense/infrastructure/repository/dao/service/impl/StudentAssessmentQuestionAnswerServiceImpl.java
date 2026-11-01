@@ -8,7 +8,6 @@ import system.assessment.defense.infrastructure.repository.dao.po.StudentAssessm
 import system.assessment.defense.infrastructure.repository.dao.service.StudentAssessmentQuestionAnswerService;
 
 import java.util.List;
-import java.util.Optional;
 
 /**
  * @USER taoHouChao
@@ -26,18 +25,15 @@ public class StudentAssessmentQuestionAnswerServiceImpl extends ServiceImpl<Stud
 
     @Override
     public void clearQuestionAnswer(Integer studentId, int assessmentId) {
-        this.remove(Wrappers.lambdaQuery(StudentAssessmentQuestionAnswerPO.class)
-                .eq(StudentAssessmentQuestionAnswerPO::getAssessmentId, assessmentId)
-                .eq(StudentAssessmentQuestionAnswerPO::getStudentId, studentId));
-    }
-
-    @Override
-    public Optional<StudentAssessmentQuestionAnswerPO> lastQuestionAnswer(Integer studentId, Integer assessmentId) {
-        return Optional.ofNullable(
-                this.getOne(Wrappers.lambdaQuery(StudentAssessmentQuestionAnswerPO.class)
+        // 先查主键再按主键删除：按 (assessment_id, student_id) 直接 DELETE 会在二级索引上加间隙锁，
+        // 同一场考核的学生同时开始面试时会互相死锁
+        List<Integer> ids = this.list(Wrappers.lambdaQuery(StudentAssessmentQuestionAnswerPO.class)
+                        .select(StudentAssessmentQuestionAnswerPO::getId)
                         .eq(StudentAssessmentQuestionAnswerPO::getStudentId, studentId)
-                        .eq(StudentAssessmentQuestionAnswerPO::getAssessmentId, assessmentId)
-                        .last("order by id desc limit 1"))
-        );
+                        .eq(StudentAssessmentQuestionAnswerPO::getAssessmentId, assessmentId))
+                .stream().map(StudentAssessmentQuestionAnswerPO::getId).toList();
+        if (!ids.isEmpty()) {
+            this.removeByIds(ids);
+        }
     }
 }

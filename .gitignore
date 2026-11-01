@@ -24,3 +24,6 @@ defense-system/.vscode/
 defense-system/*.local
 defense-system/*.iml
 .gstack/
+deploy/app/
+deploy/data/
+deploy/.env

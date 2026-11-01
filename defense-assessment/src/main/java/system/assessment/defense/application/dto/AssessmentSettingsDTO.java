@@ -93,6 +93,9 @@ public class AssessmentSettingsDTO {
     @Schema(description = "参与学生")
     private List<ParticipatingStudentDTO> participatingStudents;
 
+    @Schema(description = "题库")
+    private List<QuestionItemDTO> questions;
+
 
     @Data
     @Schema(description = "参与学生")

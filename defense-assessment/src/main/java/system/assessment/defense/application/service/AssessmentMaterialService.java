@@ -12,8 +12,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
 import system.assessment.defense.application.dto.FileDTO;
 import system.assessment.defense.application.manage.OpenAiManager;
 import system.assessment.defense.domain.event.SettingCreateOrUpdateEvent;
-import system.assessment.defense.infrastructure.common.FileByteDTO;
-import system.assessment.defense.infrastructure.common.HttpUtils;
+import system.assessment.defense.infrastructure.storage.FileStorage;
 import system.assessment.defense.infrastructure.repository.dao.po.AssessmentSettingPO;
 import system.assessment.defense.infrastructure.repository.dao.service.AssessmentSettingService;
 
@@ -52,7 +51,7 @@ public class AssessmentMaterialService {
             请解析这份考试材料，生成后续面试出题和评分可直接使用的材料上下文。
             """;
 
-    private final HttpUtils httpUtils;
+    private final FileStorage fileStorage;
     private final OpenAiManager openAiManager;
     private final AssessmentSettingService settingService;
     private final ThreadPoolExecutor threadPoolExecutor;
@@ -114,6 +113,21 @@ public class AssessmentMaterialService {
         return buildMaterialContext(files);
     }
 
+    /**
+     * 解析尚未保存的考核文件（教师创建考核时用 AI 生成题库草稿），结果不落库。
+     */
+    public String parseMaterialContext(List<FileDTO> files) {
+        if (CollectionUtils.isEmpty(files)) {
+            return "";
+        }
+        for (FileDTO file : files) {
+            if (needsParsing(file)) {
+                parseFile(file);
+            }
+        }
+        return buildMaterialContext(files);
+    }
+
     private boolean hasAssessmentFiles(AssessmentSettingPO setting) {
         return StringUtils.isNotBlank(setting.getAssessmentFiles());
     }
@@ -133,8 +147,8 @@ public class AssessmentMaterialService {
 
     private void parseFile(FileDTO file) {
         try {
-            FileByteDTO fileByteDTO = httpUtils.downloadFile(file.getFileUrl());
-            if (fileByteDTO == null || fileByteDTO.getBytes() == null || fileByteDTO.getBytes().length == 0) {
+            byte[] bytes = fileStorage.read(file.getFileUrl());
+            if (bytes == null || bytes.length == 0) {
                 throw new IllegalStateException("文件下载失败或内容为空");
             }
 
@@ -142,7 +156,7 @@ public class AssessmentMaterialService {
                     openAiManager.getTextModel(),
                     MATERIAL_EXTRACT_SYSTEM_PROMPT,
                     MATERIAL_EXTRACT_USER_PROMPT,
-                    List.of(new OpenAiManager.FileInput(fileByteDTO.getBytes(), "application/pdf"))
+                    List.of(new OpenAiManager.FileInput(bytes, "application/pdf"))
             );
             if (StringUtils.isBlank(materialText)) {
                 throw new IllegalStateException("材料解析结果为空");

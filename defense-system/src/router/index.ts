@@ -23,19 +23,20 @@ export const studnetRoutes = [
     redirect: "/studentDashboard",
     children: [
       {
-        path: "/dashboard",
-        name: "Dashboard",
+        path: "/interview",
+        name: "InterviewPage",
         component: () =>
-          import(/* webpackPreload: true */ "@/views/studentDashboard/defense/index.vue"),
+          import(/* webpackPreload: true */ "@/views/studentDashboard/interview/index.vue"),
         meta: { role: ["student"] },
+      },
+      // 旧版答辩 / 问答页面地址，统一进入新的面试页
+      {
+        path: "/dashboard",
+        redirect: (to: any) => ({ path: "/interview", query: to.query }),
       },
       {
         path: "/question",
-        name: "QuestionPage",
-        component: () =>
-          import(/* webpackPrefetch: true */ "@/views/studentDashboard/questions/index.vue"),
-          // import(/* webpackPrefetch: true */ "@/views/QuestionPage.vue"),
-        meta: { role: ["student"] },
+        redirect: (to: any) => ({ path: "/interview", query: to.query }),
       },
       {
         path: "/result",

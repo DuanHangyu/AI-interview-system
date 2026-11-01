@@ -1,24 +1,71 @@
 spring:
+  application:
+    name: defense-assessment-system
+  profiles:
+    active: ${SPRING_PROFILE:local}
   jackson:
     deserialization:
       fail-on-unknown-properties: false
       accept-empty-string-as-null-object: true
   servlet:
     multipart:
-      max-file-size: 500MB
-      max-request-size: 500MB
-  application:
-    name: defense-assessment-system
-  profiles:
-    active: local
+      # 单个回答录音约 32KB/秒，10 分钟答辩约 20MB；PDF 材料另算
+      max-file-size: ${UPLOAD_MAX_FILE_SIZE:100MB}
+      max-request-size: ${UPLOAD_MAX_REQUEST_SIZE:110MB}
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  task:
+    scheduling:
+      pool:
+        # 任务轮询与预约检查互不阻塞
+        size: 4
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: ${spring.datasource.jdbc-url}
+    username: ${DB_USERNAME:defense}
+    password: ${DB_PASSWORD:}
+    hikari:
+      # 请求链路上不再有长耗时操作，连接占用时间短；池大小按 (CPU 核数 * 2 + 磁盘数) 量级配置即可
+      maximum-pool-size: ${DB_POOL_SIZE:30}
+      minimum-idle: 5
+      # 高峰期宁可多等一会也不要直接报错
+      connection-timeout: 15000
+      idle-timeout: 300000
+      max-lifetime: 1500000
+      keepalive-time: 120000
+      validation-timeout: 3000
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DATABASE:0}
+      password: ${REDIS_PASSWORD:}
+      timeout: 5000
+      lettuce:
+        pool:
+          max-active: 32
+          max-wait: 3000ms
+          max-idle: 16
+          min-idle: 4
+          time-between-eviction-runs: 30s
 
 server:
-  port: 8081
+  port: ${BACKEND_PORT:8081}
+  shutdown: graceful
   tomcat:
-    max-http-form-post-size: 1024MB
+    # 所有请求都是短请求（读写库、存文件），不需要成千上万的线程；线程过多只会加剧数据库连接争抢
     threads:
-      max: 2000
-
+      max: ${TOMCAT_MAX_THREADS:200}
+      min-spare: 50
+    accept-count: 1000
+    max-connections: 10000
+    connection-timeout: 20s
+    max-swallow-size: 110MB
+    accesslog:
+      enabled: ${ACCESS_LOG_ENABLED:false}
+      directory: ${ACCESS_LOG_DIR:logs}
+      # %D 为请求总耗时（毫秒，包含读取请求体），用于排查慢请求
+      pattern: '%t "%r" %s %b %Dms'
 
 springdoc:
   api-docs:
@@ -32,43 +79,104 @@ springdoc:
 mybatis-plus:
   type-aliases-package: system.assessment.defense.infrastructure.repository.dao.po
   configuration:
-    map-underscore-to-camel-case: true # 启用驼峰映射
+    map-underscore-to-camel-case: true
   global-config:
     db-config:
-      id-type: auto # 主键自增策略
+      id-type: auto
       logic-delete-field: deleted
-      logic-delete-value: 1 # 逻辑已删除值 默认1
+      logic-delete-value: 1
       logic-not-delete-value: 0
 
 ############## Sa-Token 配置 (文档: https://sa-token.cc) ##############
+# 登录态保存在 Redis（sa-token-redis-jackson），多实例部署时天然共享
 sa-token:
-  # token 名称（同时也是 cookie 名称）
   token-name: Authorization
-  # token 前缀
   token-prefix: Bearer
-  # token 有效期（单位：秒） 默认1天，-1 代表永久有效
   timeout: 86400
-  # token 最低活跃频率（单位：秒），如果 token 超过此时间没有访问系统就会被冻结，默认-1 代表不限制，永不冻结
   active-timeout: -1
-  # 是否允许同一账号多地同时登录 （为 true 时允许一起登录, 为 false 时新登录挤掉旧登录）
   is-concurrent: false
-  # 在多人登录同一账号时，是否共用一个 token （为 true 时所有登录共用一个 token, 为 false 时每次登录新建一个 token）
   is-share: false
-  # token 风格（默认可取值：uuid、simple-uuid、random-32、random-64、random-128、tik）
   token-style: random-64
-  # 是否输出操作日志
   is-log: false
   is-read-cookie: true
 
 logging:
   level:
     root: info
-#    system.assessment.defense.infrastructure.repository.dao.mapper: debug
 
-## 阿里云oss存储
+dashscope:
+  base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+  native-base-url: https://dashscope.aliyuncs.com/api/v1
+  api-key: ${DASHSCOPE_API_KEY:}
+  enable-thinking: ${DASHSCOPE_ENABLE_THINKING:false}
+  models:
+    text: ${DASHSCOPE_TEXT_MODEL:qwen3.6-plus}
+    doc: qwen-long
+    asr: ${DASHSCOPE_ASR_MODEL:qwen3-asr-flash}
+    tts: ${DASHSCOPE_TTS_MODEL:qwen3-tts-flash}
+  tts:
+    voice: ${DASHSCOPE_TTS_VOICE:Cherry}
+  asr:
+    chunk-seconds: 120
+  # 单实例同时在途的大模型请求上限，按百炼账号的 RPM / 并发配额调整
+  concurrency:
+    llm: ${DASHSCOPE_CONCURRENCY_LLM:6}
+    asr: ${DASHSCOPE_CONCURRENCY_ASR:10}
+    tts: ${DASHSCOPE_CONCURRENCY_TTS:6}
+    acquire-timeout-ms: 60000
+
+http-client:
+  connect-timeout-seconds: 10
+  read-timeout-seconds: 180
+  call-timeout-seconds: 240
+
+# 后台任务（语音转写、评分、题目语音预生成），持久化在 async_task 表，多实例安全
+task:
+  worker:
+    enabled: ${TASK_WORKER_ENABLED:true}
+    # 逗号分隔的任务类型，只处理这些类型；为空处理全部
+    types: ${TASK_WORKER_TYPES:}
+    poll-interval-ms: 1000
+  concurrency:
+    # 三类转写任务各自的并发；3 × 3 = 9，不超过 dashscope.concurrency.asr
+    asr: ${TASK_CONCURRENCY_ASR:3}
+    analysis: ${TASK_CONCURRENCY_ANALYSIS:4}
+    tts: ${TASK_CONCURRENCY_TTS:2}
+
+# 文件存储：auto = 配置了 OSS AccessKey 用 OSS，否则用本地磁盘
+storage:
+  type: ${STORAGE_TYPE:auto}
+  local:
+    dir: ${STORAGE_LOCAL_DIR:./data/storage}
+    # 浏览器访问本地文件时的 URL 前缀（即前端访问后端 API 的前缀），例如 /dev-api 或 /api
+    public-url-prefix: ${STORAGE_PUBLIC_URL_PREFIX:}
+    secret: ${STORAGE_LOCAL_SECRET:change-me-in-production}
+
 aliyun:
   oss:
     endpoint: ${ALIYUN_OSS_ENDPOINT:oss-ap-southeast-1.aliyuncs.com}
     accessKeyId: ${ALIYUN_OSS_ACCESS_KEY_ID:}
     accessKeySecret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:}
     bucketName: ${ALIYUN_OSS_BUCKET:defense-assessment-new}
+
+jetcache:
+  statIntervalMinutes: 15
+  areaInCacheName: false
+  local:
+    default:
+      type: caffeine
+      keyConvertor: jackson
+      limit: 100
+      expireAfterWriteInMillis: 60000
+  remote:
+    default:
+      type: redis.lettuce
+      keyConvertor: jackson
+      broadcastChannel: projectA
+      valueEncoder: java
+      valueDecoder: java
+      uri: ${JETCACHE_REDIS_URI:redis://127.0.0.1:6379/0}
+
+# 缺勤标记等定时任务；start 才会执行
+scheduler:
+  start: ${SCHEDULER_START:start}

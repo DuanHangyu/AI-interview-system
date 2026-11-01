@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Local development schema for the AI Interview System (defense-assessment).
--- Reverse-engineered from the 12 MyBatis-Plus PO entities.
+-- Matches the MyBatis-Plus PO entities.
 -- NOTE: This is a fresh local DB (data was disposable dev data). Column types
 -- are inferred from Java field types; nullable/length/index choices are
 -- reasonable defaults. If a flow reports a column mismatch, fix here & re-apply.
@@ -20,8 +20,8 @@ CREATE TABLE `user` (
   `phone` VARCHAR(32) DEFAULT NULL,
   `type` INT DEFAULT NULL COMMENT '0=student,1=teacher,2=admin',
   `school_class` VARCHAR(255) DEFAULT NULL,
-  `create_time` DATETIME DEFAULT NULL,
-  `update_time` DATETIME DEFAULT NULL,
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_user_account` (`account`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -74,7 +74,7 @@ CREATE TABLE `assessment_invite` (
   `assessment_id` INT DEFAULT NULL,
   `invitee_teacher_id` INT DEFAULT NULL,
   `inviter_teacher_id` INT DEFAULT NULL,
-  `create_time` DATETIME DEFAULT NULL,
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_ai_assessment_id` (`assessment_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -86,7 +86,7 @@ CREATE TABLE `assessment_student_relation` (
   `assessment_id` INT DEFAULT NULL,
   `student_id` INT DEFAULT NULL,
   `relation_type` INT DEFAULT NULL,
-  `create_time` DATETIME DEFAULT NULL,
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_asr_assessment_id` (`assessment_id`),
   KEY `idx_asr_student_id` (`student_id`)
@@ -112,7 +112,7 @@ CREATE TABLE `student_assessment_appointment` (
   `state` INT DEFAULT NULL,
   `punish_state` INT DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_saa_student_id` (`student_id`),
+  KEY `idx_saa_student_id` (`student_id`, `assessment_id`),
   KEY `idx_saa_assessment_id` (`assessment_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -122,16 +122,20 @@ CREATE TABLE `student_assessment_question_answer` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `assessment_id` INT DEFAULT NULL,
   `student_id` INT DEFAULT NULL,
+  `question_id` INT DEFAULT NULL COMMENT '抽中的题库题目 id',
+  `sort_index` INT DEFAULT NULL COMMENT '本场面试中的题序，从 1 开始',
+  `dimension` VARCHAR(255) DEFAULT NULL,
+  `reference_answer` TEXT COMMENT '抽题时的参考答案快照',
   `question` TEXT,
   `answer` TEXT,
   `answer_voice` VARCHAR(1000) DEFAULT NULL,
   `follow_question` TEXT,
   `follow_answer` TEXT,
   `follow_answer_voice` VARCHAR(1000) DEFAULT NULL,
-  `create_time` DATETIME DEFAULT NULL,
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_saqa_assessment_id` (`assessment_id`),
-  KEY `idx_saqa_student_id` (`student_id`)
+  UNIQUE KEY `uk_saqa_student_assessment_sort` (`student_id`, `assessment_id`, `sort_index`),
+  KEY `idx_saqa_assessment_id` (`assessment_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- student_assessment_record ----------
@@ -146,16 +150,56 @@ CREATE TABLE `student_assessment_record` (
   `score` INT DEFAULT NULL,
   `check_score` INT DEFAULT NULL,
   `defense_time` INT DEFAULT NULL,
+  `start_time` DATETIME DEFAULT NULL COMMENT '面试开始时间，为空表示未开始',
   `start_defense_time` DATETIME DEFAULT NULL,
   `end_defense_time` DATETIME DEFAULT NULL,
   `defense_result` TEXT,
   `state` INT DEFAULT NULL,
   `re_analysis` TINYINT(1) DEFAULT 0,
-  `create_time` DATETIME DEFAULT NULL,
-  `update_time` DATETIME DEFAULT NULL,
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_sar_assessment_id` (`assessment_id`),
-  KEY `idx_sar_student_id` (`student_id`)
+  UNIQUE KEY `uk_sar_student_assessment` (`student_id`, `assessment_id`),
+  KEY `idx_sar_assessment_id` (`assessment_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- assessment_question (题库) ----------
+DROP TABLE IF EXISTS `assessment_question`;
+CREATE TABLE `assessment_question` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `assessment_id` INT NOT NULL,
+  `dimension` VARCHAR(255) DEFAULT NULL COMMENT '考核维度，用于均衡抽题',
+  `content` TEXT NOT NULL,
+  `reference_answer` TEXT COMMENT '参考答案 / 评分要点，仅用于 AI 评分',
+  `follow_up_question` TEXT COMMENT '预制追问，为空表示不追问',
+  `sort` INT NOT NULL DEFAULT 0,
+  `audio_key` VARCHAR(500) DEFAULT NULL COMMENT '题目播报音频存储 key',
+  `follow_up_audio_key` VARCHAR(500) DEFAULT NULL,
+  `deleted` TINYINT(1) NOT NULL DEFAULT 0,
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_aq_assessment_id` (`assessment_id`, `deleted`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ---------- async_task (持久化后台任务) ----------
+DROP TABLE IF EXISTS `async_task`;
+CREATE TABLE `async_task` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `task_type` VARCHAR(32) NOT NULL,
+  `biz_id` INT NOT NULL,
+  `status` TINYINT NOT NULL DEFAULT 0 COMMENT '0待执行 1执行中 2成功 3失败',
+  `attempts` INT NOT NULL DEFAULT 0,
+  `max_attempts` INT NOT NULL DEFAULT 5,
+  `next_run_time` DATETIME NOT NULL,
+  `locked_until` DATETIME DEFAULT NULL,
+  `owner` VARCHAR(64) DEFAULT NULL,
+  `last_error` VARCHAR(1000) DEFAULT NULL,
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_task` (`task_type`, `biz_id`),
+  KEY `idx_task_due` (`task_type`, `status`, `next_run_time`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- token_consumer ----------
@@ -170,7 +214,7 @@ CREATE TABLE `token_consumer` (
   `total_token_count` INT DEFAULT NULL,
   `cached_content_token_count` INT DEFAULT NULL,
   `cost_time` BIGINT DEFAULT NULL,
-  `create_time` DATETIME DEFAULT NULL,
+  `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

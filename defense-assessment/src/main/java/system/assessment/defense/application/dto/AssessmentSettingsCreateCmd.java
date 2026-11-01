@@ -1,5 +1,6 @@
 package system.assessment.defense.application.dto;
 
+import system.assessment.defense.application.service.interview.QuestionBankService;
 import cn.dev33.satoken.stp.StpUtil;
 import cn.hutool.json.JSONUtil;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -81,6 +82,9 @@ public class AssessmentSettingsCreateCmd {
     @Schema(description = "学生id集合")
     private List<Integer> studentIds;
 
+    @Schema(description = "题库，学生从中随机抽取 questionCount 道")
+    private List<QuestionItemDTO> questions;
+
 
 
     public AssessmentSettingPO toPO(){
@@ -106,5 +110,6 @@ public class AssessmentSettingsCreateCmd {
     }
 
     public void check() {
+        QuestionBankService.validate(question, questionCount, questions);
     }
 }

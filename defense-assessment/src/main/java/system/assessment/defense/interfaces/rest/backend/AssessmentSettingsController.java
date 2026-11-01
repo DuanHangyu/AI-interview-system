@@ -14,6 +14,9 @@ import system.assessment.defense.application.dto.backed.AssessmentAppointSetting
 import system.assessment.defense.application.dto.backed.CancelStudentAppointmentCmd;
 import system.assessment.defense.application.dto.backed.LiftPunishCmd;
 import system.assessment.defense.application.service.AssessmentAppService;
+import system.assessment.defense.application.service.interview.QuestionBankService;
+
+import java.util.List;
 
 /**
  * @USER taoHouChao
@@ -27,6 +30,15 @@ public class AssessmentSettingsController {
 
     @Resource
     private AssessmentAppService assessmentAppService;
+
+    @Resource
+    private QuestionBankService questionBankService;
+
+    @PostMapping("/question/ai-draft")
+    @Operation(summary = "AI 生成题库草稿（教师审核后保存）")
+    public List<QuestionItemDTO> questionDraft(@RequestBody QuestionDraftCmd cmd) {
+        return questionBankService.draft(cmd);
+    }
 
     @PostMapping("/list")
     @Operation(summary = "获取考核设置列表")

@@ -9,8 +9,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import system.assessment.defense.application.dto.FileDTO;
 import system.assessment.defense.application.manage.OpenAiManager;
-import system.assessment.defense.infrastructure.common.FileByteDTO;
-import system.assessment.defense.infrastructure.common.HttpUtils;
+import system.assessment.defense.infrastructure.storage.FileStorage;
 import system.assessment.defense.infrastructure.repository.dao.po.AssessmentSettingPO;
 import system.assessment.defense.infrastructure.repository.dao.service.AssessmentSettingService;
 
@@ -34,7 +33,7 @@ import static org.mockito.Mockito.when;
 class AssessmentMaterialServiceTest {
 
     @Mock
-    private HttpUtils httpUtils;
+    private FileStorage fileStorage;
 
     @Mock
     private OpenAiManager openAiManager;
@@ -48,7 +47,7 @@ class AssessmentMaterialServiceTest {
     @BeforeEach
     void setUp() {
         threadPoolExecutor = new ThreadPoolExecutor(1, 1, 1, TimeUnit.SECONDS, new ArrayBlockingQueue<>(1));
-        materialService = new AssessmentMaterialService(httpUtils, openAiManager, settingService, threadPoolExecutor);
+        materialService = new AssessmentMaterialService(fileStorage, openAiManager, settingService, threadPoolExecutor);
     }
 
     @AfterEach
@@ -72,7 +71,7 @@ class AssessmentMaterialServiceTest {
         String context = materialService.getOrParseMaterialContext(setting);
 
         assertThat(context).contains("design.pdf", "AI 面试系统");
-        verifyNoInteractions(httpUtils, openAiManager, settingService);
+        verifyNoInteractions(fileStorage, openAiManager, settingService);
     }
 
     @Test
@@ -87,7 +86,7 @@ class AssessmentMaterialServiceTest {
                 .build();
 
         byte[] pdfBytes = "fake pdf".getBytes(StandardCharsets.UTF_8);
-        when(httpUtils.downloadFile("oss/design.pdf")).thenReturn(new FileByteDTO(pdfBytes));
+        when(fileStorage.read("oss/design.pdf")).thenReturn(pdfBytes);
         when(openAiManager.getTextModel()).thenReturn("qwen3.6-plus");
         when(openAiManager.chatCompletionWithFiles(eq("qwen3.6-plus"), anyString(), anyString(), any()))
                 .thenReturn("项目背景：缓存后的材料摘要。");
@@ -110,8 +109,8 @@ class AssessmentMaterialServiceTest {
                 .assessmentFiles(JSONUtil.toJsonStr(List.of(file)))
                 .build();
 
-        when(httpUtils.downloadFile("oss/large-design.pdf"))
-                .thenReturn(new FileByteDTO("fake pdf".getBytes(StandardCharsets.UTF_8)));
+        when(fileStorage.read("oss/large-design.pdf"))
+                .thenReturn("fake pdf".getBytes(StandardCharsets.UTF_8));
         when(openAiManager.getTextModel()).thenReturn("qwen3.6-plus");
         when(openAiManager.chatCompletionWithFiles(eq("qwen3.6-plus"), anyString(), anyString(), any()))
                 .thenReturn("项目背景：".repeat(1000));
@@ -135,7 +134,7 @@ class AssessmentMaterialServiceTest {
         String context = materialService.getOrParseMaterialContext(setting);
 
         assertThat(context).isEmpty();
-        verify(httpUtils, never()).downloadFile(anyString());
+        verify(fileStorage, never()).read(anyString());
         verifyNoInteractions(openAiManager, settingService);
     }
 }

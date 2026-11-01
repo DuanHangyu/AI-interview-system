@@ -57,6 +57,9 @@ public class StudentAssessmentRecordPO {
     @Schema(description = "答辩时间")
     private Integer defenseTime;
 
+    @Schema(description = "面试开始时间（为空表示尚未开始）")
+    private LocalDateTime startTime;
+
     @Schema(description = "开始答辩时间")
     private LocalDateTime startDefenseTime;
 

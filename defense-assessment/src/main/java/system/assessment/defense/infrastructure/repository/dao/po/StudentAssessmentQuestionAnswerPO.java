@@ -30,6 +30,23 @@ public class StudentAssessmentQuestionAnswerPO {
 
     private Integer studentId;
 
+    /**
+     * 抽中的题库题目 id
+     */
+    private Integer questionId;
+
+    /**
+     * 本场面试中的题序，从 1 开始；(student_id, assessment_id, sort_index) 唯一，保证重复抽题请求幂等
+     */
+    private Integer sortIndex;
+
+    private String dimension;
+
+    /**
+     * 抽题时的参考答案快照，教师之后修改题库不影响已完成的面试评分
+     */
+    private String referenceAnswer;
+
     private String question;
 
     private String answer;

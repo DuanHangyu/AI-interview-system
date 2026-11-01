@@ -36,6 +36,16 @@ export function createAssessment(data: Record<string, any>) {
   });
 }
 
+// AI 生成题目草稿（耗时较长）
+export function generateQuestionDraft(data: Record<string, any>) {
+  return request({
+    url: "/backend/assessment/question/ai-draft",
+    method: "post",
+    data,
+    timeout: 120000,
+  });
+}
+
 // 获取考核信息
 export function getAssessmentDetail(assessmentId: number) {
   return request({

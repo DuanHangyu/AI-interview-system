@@ -17,7 +17,7 @@
   <a href="#常见问题">常见问题</a>
 </p>
 
-面向高校课程答辩、项目验收和能力测评场景的 AI 面试系统。系统支持教师创建考核、学生在线预约与答辩、实时语音问答、追问生成、PDF 材料上传、自动评分与结果分析，帮助教学团队把分散的答辩流程沉淀为可追踪、可复盘、可量化的数字化工作流。
+面向高校课程答辩、项目验收和能力测评场景的 AI 面试系统。系统支持教师创建考核与预制题库、学生在线预约、随机抽题语音面试、预制追问、PDF 材料上传、自动转写评分与结果分析，帮助教学团队把分散的答辩流程沉淀为可追踪、可复盘、可量化的数字化工作流。
 
 > 本项目为前后端分离架构，前端位于 `defense-system`，后端位于 `defense-assessment`。
 
@@ -33,84 +33,73 @@
 
 ## 核心能力
 
-- **多角色工作台**：支持学生、教师、管理员三类角色，按角色动态加载工作台与权限路由。
-- **考核配置管理**：教师可创建答辩主题、设置考核时长、题目数量、评分规则、预约安排和参与学生。
+- **多角色工作台**：学生、教师、管理员三类角色，按角色动态加载工作台与权限路由。
+- **考核与题库管理**：教师创建考核时维护题库（题目、考核维度、参考答案、预制追问），设置每位学生的抽题数、答辩 / 作答时长、评分标准和参与学生；可用 AI 根据考核信息和 PDF 材料生成题库草稿，审核后保存。
+- **随机抽题**：学生开始面试时按考核维度均衡地随机抽题，抽题结果持久化，刷新或重连后保持不变；重考会重新抽题。
+- **稳定的语音面试**：题目语音在教师保存题库后预先合成；学生在浏览器本地录音，每答完一题用普通 HTTP 请求上传。面试进度全部保存在服务端，所有接口幂等、可安全重试，断网 / 刷新后自动恢复。
+- **异步转写与评分**：语音转写（qwen3-asr-flash）与 AI 评分（qwen3.6-plus）在持久化任务队列中执行，带并发上限、失败退避重试和多实例抢占。
 - **学生在线预约**：学生可查看待预约、待完成、评估中、已结束的考核任务。
-- **实时语音面试**：通过 WebSocket 接入实时语音能力，支持学生语音输入、题目语音播报和实时答题状态同步。
-- **AI 题目与追问**：系统根据考核设置、答辩材料和学生回答动态生成问题与追问。
-- **PDF 材料上传与预览**：答辩材料通过对象存储保存，前端可在线预览。
-- **自动评分与分析**：面试结束后生成总分、维度得分、答题明细、追问记录和改进建议。
-- **过程缓存与恢复**：使用 Redis 缓存实时题目、追问和会话过程数据，降低重复生成和链路抖动影响。
+- **结果分析**：总分、维度得分、答题明细（含录音回放）、追问记录、亮点 / 不足 / 改进建议；教师可改分、重考、重新评分、导出。
+
+架构设计与高并发改造说明见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
 ## 技术栈
 
 ### 前端
 
-- Vue 3
-- Vue Router 4
-- Pinia
-- Ant Design Vue
-- ECharts
-- Tailwind CSS
+- Vue 3 / Vue Router 4 / Pinia
+- Ant Design Vue / Tailwind CSS / ECharts
 - Axios
-- XGPlayer
+- Web Audio（AudioWorklet）本地录音，16kHz 单声道 WAV
 
 ### 后端
 
-- Java 21
-- Spring Boot 3.5
-- Spring Web / WebSocket
-- Sa-Token
-- MyBatis-Plus
-- HikariCP
+- Java 21 / Spring Boot 3.5（Spring Web，无 WebSocket）
+- Sa-Token（登录态存 Redis，支持多实例）
+- MyBatis-Plus / HikariCP
 - Redis / JetCache
-- Aliyun OSS SDK
-- OkHttp
+- OkHttp（调用百炼）
+- Aliyun OSS SDK（或本地磁盘存储）
 - SpringDoc OpenAPI
 
 ### 基础设施
 
-- **MySQL**：结构化业务数据，例如用户、考核设置、预约、答题记录和评分结果。
-- **Redis**：实时面试过程缓存，例如当前题目、追问、临时会话状态和部分登录态。
-- **对象存储 OSS**：保存 PDF、图片、音频等非结构化文件。
-- **DashScope / Qwen**：提供文本生成、实时语音、多模态理解等 AI 能力。
+- **MySQL**：业务数据，以及面试进度、抽题结果、后台任务队列（`async_task`）。
+- **Redis**：登录态与缓存。
+- **文件存储**：阿里云 OSS，未配置 OSS 时自动使用本地磁盘（私有化部署 / 开发测试）。
+- **DashScope / Qwen**：qwen3.6-plus（评分、生成题库草稿）、qwen3-asr-flash（语音转写）、qwen3-tts-flash（题目播报）、qwen-long（PDF 材料解析）。
 
 ## 系统架构
 
 ```mermaid
 flowchart LR
-  student["学生浏览器"] --> frontend["Vue 前端"]
-  teacher["教师 / 管理员浏览器"] --> frontend
-
-  frontend --> rest["REST API"]
-  frontend --> ws["WebSocket 实时通道"]
-
-  rest --> backend["Spring Boot 后端"]
-  ws --> backend
-
-  backend --> mysql[("MySQL")]
-  backend --> redis[("Redis")]
-  backend --> oss["对象存储 OSS"]
-  backend --> qwen["DashScope / Qwen 模型"]
-
-  oss --> preview["PDF / 文件预览"]
-  qwen --> realtime["实时语音识别、问答、播报"]
+  student["学生浏览器<br/>本地录音"] --> nginx["Nginx<br/>静态资源 + /api 反向代理"]
+  teacher["教师 / 管理员浏览器"] --> nginx
+  nginx --> backend["Spring Boot 后端<br/>（可多实例）"]
+  backend --> mysql[("MySQL<br/>业务数据 + 任务队列")]
+  backend --> redis[("Redis<br/>登录态")]
+  backend --> storage["OSS / 本地存储<br/>录音、PDF、题目语音"]
+  backend -. 后台任务 .-> qwen["百炼 DashScope<br/>ASR / TTS / LLM"]
 ```
+
+请求链路（学生答题）只做"存文件 + 写数据库"，不调用大模型；语音转写、评分、语音合成都由后台任务完成。
 
 ## 目录结构
 
 ```text
 .
 ├── defense-assessment/        # Spring Boot 后端
-│   ├── src/main/java/          # 业务代码、接口、服务、配置
+│   ├── src/main/java/.../application/service/interview/  # 面试流程、题库、抽题、评分
+│   ├── src/main/java/.../application/task/               # 持久化后台任务队列
+│   ├── src/main/java/.../infrastructure/storage/         # OSS / 本地存储
 │   └── src/main/resources/     # application 配置
 ├── defense-system/             # Vue 3 前端
-│   ├── src/api/                # 前端 API 封装
-│   ├── src/views/              # 页面
-│   ├── src/components/         # 通用组件
-│   └── src/router/             # 路由与权限
-├── scripts/                    # 本地启动脚本
-├── docs/images/                # README 截图资源
+│   ├── src/views/studentDashboard/interview/  # 学生面试页
+│   ├── src/composables/useAudioRecorder.ts    # 本地录音
+│   └── src/api/                # 前端 API 封装
+├── deploy/                     # Docker Compose 部署（MySQL + Redis + 后端 + Nginx）
+├── scripts/                    # 本地启动脚本、建表脚本、数据库迁移
+├── docs/                       # 架构文档与截图
 ├── .env.example                # 本地环境变量模板
 └── README.md
 ```
@@ -119,261 +108,150 @@ flowchart LR
 
 ### 环境要求
 
-- Node.js 18+
-- npm 9+
+- Node.js 18+、npm 9+
 - Java 21
-- MySQL 8+
-- Redis 6+
-- 可用的 DashScope API Key
-- 可用的对象存储服务，例如 Aliyun OSS
+- MySQL 8+、Redis 6+
+- DashScope API Key（需开通 qwen3.6-plus、qwen3-asr-flash、qwen3-tts-flash）
+- 可选：阿里云 OSS（不配置则使用本地磁盘）
 
-### 1. 克隆项目
-
-```bash
-git clone <your-repository-url>
-cd AI_Interview_system
-```
-
-### 2. 配置环境变量
-
-复制环境变量模板：
+### 1. 配置环境变量
 
 ```bash
 cp .env.example .env.local
 ```
 
-按需填写以下配置：
-
-```bash
-SPRING_PROFILE='local'
-BACKEND_PORT='8081'
-FRONTEND_PORT='3004'
-
-DASHSCOPE_API_KEY='<your-dashscope-api-key>'
-DASHSCOPE_REALTIME_MODEL='qwen3.5-omni-flash-realtime'
-DASHSCOPE_REALTIME_VOICE='Ethan'
-
-DB_JDBC_URL='jdbc:mysql://127.0.0.1:13307/defense_test?useUnicode=true&characterEncoding=UTF-8&useSSL=false&serverTimezone=GMT%2B8&allowMultiQueries=true'
-DB_USERNAME='<your-db-user>'
-DB_PASSWORD='<your-db-password>'
-
-DB_TUNNEL_ENABLED='true'
-DB_TUNNEL_WATCH='true'
-DB_TUNNEL_CHECK_INTERVAL='5'
-DB_TUNNEL_LOCAL_HOST='127.0.0.1'
-DB_TUNNEL_LOCAL_PORT='13307'
-DB_TUNNEL_REMOTE_HOST='127.0.0.1'
-DB_TUNNEL_REMOTE_PORT='3306'
-DB_TUNNEL_SSH_HOST='<your-server-host>'
-DB_TUNNEL_SSH_USER='<your-server-user>'
-DB_TUNNEL_SSH_PASSWORD='<your-server-password>'
-
-JETCACHE_REDIS_URI='redis://127.0.0.1:6379/0'
-REDIS_PASSWORD=''
-
-ALIYUN_OSS_ENDPOINT='<your-oss-endpoint>'
-ALIYUN_OSS_ACCESS_KEY_ID='<your-oss-access-key-id>'
-ALIYUN_OSS_ACCESS_KEY_SECRET='<your-oss-access-key-secret>'
-ALIYUN_OSS_BUCKET='<your-oss-bucket>'
-```
+至少填写 `DASHSCOPE_API_KEY`、`DB_JDBC_URL`、`DB_USERNAME`、`DB_PASSWORD`。其余配置项见 `.env.example` 中的说明。
 
 > `.env.local` 包含 API Key、数据库密码、对象存储密钥等敏感信息，已经被 Git 忽略，请勿提交。
 
-### 3. 准备数据库与 Redis
-
-请准备一个 MySQL 数据库，例如：
-
-```sql
-CREATE DATABASE defense_test DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-```
-
-当前仓库不内置生产数据。开源部署时建议自行维护数据库迁移脚本，例如 Flyway、Liquibase 或标准 SQL 初始化脚本。
-
-Redis 默认连接：
-
-```text
-redis://127.0.0.1:6379/0
-```
-
-如需密码或远程 Redis，请同步修改 `spring.data.redis` 与 `JETCACHE_REDIS_URI` 相关配置。
-
-### 4. 启动后端
+### 2. 初始化数据库
 
 ```bash
-./scripts/start-backend.sh
+mysql -uroot -p -e "CREATE DATABASE defense_test DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+mysql -uroot -p defense_test < scripts/local-db-schema.sql
+mysql -uroot -p defense_test < scripts/local-db-seed.sql   # 测试账号 admin/admin123、teacher/teacher123、student/student123
 ```
 
-后端默认地址：
+从旧版本（WebSocket 实时出题）升级已有数据库：先备份，再执行 `scripts/migrations/V2__prebuilt_question_interview.sql`。旧考核没有题库，需要老师补充题库后再开放给学生。
 
-```text
-http://localhost:8081
-```
-
-OpenAPI 文档地址：
-
-```text
-http://localhost:8081/swagger-ui.html
-```
-
-### 5. 启动前端
+### 3. 启动
 
 ```bash
+./scripts/start-backend.sh      # http://localhost:8081 ，接口文档 /swagger-ui.html
 npm --prefix defense-system install
-./scripts/start-frontend.sh
+./scripts/start-frontend.sh     # http://localhost:3004
 ```
 
-前端默认地址：
+本地开发未配置 OSS 时，`.env.local` 中设置 `STORAGE_PUBLIC_URL_PREFIX='/dev-api'`，录音和 PDF 会保存在 `defense-assessment/data/storage`。
 
-```text
-http://localhost:3004
-```
+## 部署
 
-### 6. 一键重启
-
-本地开发时可以使用：
+`deploy/` 目录提供单机 Docker Compose 部署：
 
 ```bash
-./scripts/restart-local.sh
+./deploy/deploy.sh                 # 构建后端 jar 与前端（staging 模式，API 前缀 /api）到 deploy/app
+cd deploy && cp .env.example .env  # 修改密码、密钥，填写 DASHSCOPE_API_KEY
+docker compose up -d               # 默认访问 http://<服务器>:18100
 ```
 
-脚本会读取根目录 `.env.local`，并启动前端与后端服务。不要直接在 `defense-assessment` 目录里手动运行 `./mvnw spring-boot:run`，除非已经显式加载 `.env.local`；否则后端可能缺少 `DB_PASSWORD` 等环境变量，表现为端口可用但登录接口返回数据库连接失败。
+数据库首次启动时自动建表并写入测试账号，**上线前请修改或删除测试账号**。
+
+横向扩容：后端可以部署多个实例（登录态在 Redis，后台任务通过数据库抢占，互不重复执行），此时文件存储必须使用 OSS 或共享目录。也可以用 `TASK_WORKER_TYPES` 让部分实例只处理特定类型的后台任务。
 
 ## 配置说明
 
-### AI 模型
-
-后端通过 `dashscope.*` 配置接入模型服务：
+### AI 模型与并发
 
 | 配置项 | 说明 |
 | --- | --- |
-| `DASHSCOPE_API_KEY` | DashScope API Key |
-| `DASHSCOPE_REALTIME_ENABLED` | 是否启用实时语音链路 |
-| `DASHSCOPE_REALTIME_URL` | 实时模型 WebSocket 地址 |
-| `DASHSCOPE_REALTIME_MODEL` | 实时语音模型，默认 `qwen3.5-omni-flash-realtime` |
-| `DASHSCOPE_REALTIME_VOICE` | 题目播报音色 |
-| `DASHSCOPE_ENABLE_THINKING` | 是否启用模型思考能力 |
+| `DASHSCOPE_API_KEY` | 百炼 API Key |
+| `DASHSCOPE_TEXT_MODEL` | 评分 / 出题模型，默认 `qwen3.6-plus` |
+| `DASHSCOPE_ASR_MODEL` | 语音转写模型，默认 `qwen3-asr-flash` |
+| `DASHSCOPE_TTS_MODEL` / `DASHSCOPE_TTS_VOICE` | 题目播报模型与音色，默认 `qwen3-tts-flash` / `Cherry` |
+| `DASHSCOPE_CONCURRENCY_LLM` / `_ASR` / `_TTS` | 单实例同时在途的大模型请求上限，按账号配额调整 |
+| `TASK_CONCURRENCY_ASR` / `_ANALYSIS` / `_TTS` | 每类后台任务的并发线程数（三类转写任务合计不要超过 ASR 上限） |
+| `TASK_WORKER_ENABLED` / `TASK_WORKER_TYPES` | 是否在本实例执行后台任务 / 只执行哪些类型 |
 
-### 数据库
-
-本项目使用 MySQL 保存长期业务数据，后端通过 HikariCP 管理数据库连接池。
-
-| 配置项 | 说明 |
-| --- | --- |
-| `DB_JDBC_URL` | MySQL JDBC 连接地址 |
-| `DB_USERNAME` | 数据库用户名 |
-| `DB_PASSWORD` | 数据库密码 |
-
-本地开发如果需要通过 SSH Tunnel 访问远程 MySQL，可启用以下配置。当前本地开发推荐让 `DB_JDBC_URL` 指向 `127.0.0.1:13307`，由脚本负责把该端口转发到服务器 MySQL：
-
-```bash
-DB_TUNNEL_ENABLED='true'
-DB_TUNNEL_WATCH='true'
-DB_TUNNEL_CHECK_INTERVAL='5'
-DB_TUNNEL_LOCAL_HOST='127.0.0.1'
-DB_TUNNEL_LOCAL_PORT='13307'
-DB_TUNNEL_REMOTE_HOST='127.0.0.1'
-DB_TUNNEL_REMOTE_PORT='3306'
-DB_TUNNEL_SSH_HOST='<your-server-host>'
-DB_TUNNEL_SSH_USER='<your-server-user>'
-DB_TUNNEL_SSH_PASSWORD='<your-server-password>'
-```
-
-生产部署不建议依赖本地 SSH Tunnel。推荐将后端部署到与 MySQL 相同的私有网络，使用内网地址连接数据库。
-
-本地 `local` profile 会要求 `DB_USERNAME` 和 `DB_PASSWORD` 必须存在；如果缺失，后端应当启动失败，而不是等到登录页才抛数据库连接错误。
-
-### Redis
-
-Redis 用于缓存实时面试过程数据、模型生成结果和部分会话状态。相关代码主要位于：
-
-- `StudentAssessmentService`
-- `RedisConstants`
-- `CacheConfig`
-
-### 对象存储
-
-系统通过 OSS 保存 PDF 材料和其他文件。数据库中通常只保存文件路径或 URL，实际文件由对象存储承载。
+### 数据库与 Web
 
 | 配置项 | 说明 |
 | --- | --- |
-| `ALIYUN_OSS_ENDPOINT` | OSS Endpoint |
-| `ALIYUN_OSS_ACCESS_KEY_ID` | Access Key ID |
-| `ALIYUN_OSS_ACCESS_KEY_SECRET` | Access Key Secret |
-| `ALIYUN_OSS_BUCKET` | Bucket 名称 |
+| `DB_JDBC_URL` / `DB_USERNAME` / `DB_PASSWORD` | MySQL 连接 |
+| `DB_POOL_SIZE` | 连接池大小，默认 30 |
+| `TOMCAT_MAX_THREADS` | Web 线程数，默认 200 |
+| `REDIS_HOST` / `REDIS_PORT` / `REDIS_PASSWORD` / `JETCACHE_REDIS_URI` | Redis 连接 |
+
+### 文件存储
+
+| 配置项 | 说明 |
+| --- | --- |
+| `STORAGE_TYPE` | `auto`（默认，配置了 OSS 密钥就用 OSS）/ `oss` / `local` |
+| `ALIYUN_OSS_*` | OSS Endpoint、AccessKey、Bucket |
+| `STORAGE_LOCAL_DIR` | 本地存储目录 |
+| `STORAGE_PUBLIC_URL_PREFIX` | 浏览器访问后端的 URL 前缀（如 `/dev-api`、`/api`），用于生成本地文件的签名直链 |
+| `STORAGE_LOCAL_SECRET` | 本地文件直链的签名密钥，生产环境务必修改 |
 
 ## 面试流程
 
 ```mermaid
 sequenceDiagram
   participant T as 教师
-  participant S as 学生
-  participant FE as 前端
+  participant S as 学生浏览器
   participant BE as 后端
-  participant AI as Qwen 模型
-  participant DB as MySQL
-  participant R as Redis
-  participant OSS as OSS
+  participant Q as 任务队列(MySQL)
+  participant AI as 百炼
 
-  T->>BE: 创建考核与评分规则
-  BE->>DB: 保存考核配置
-  S->>FE: 预约并进入面试
-  FE->>BE: 获取考核详情
-  S->>OSS: 上传 PDF 材料
-  BE->>AI: 生成题目 / 追问
-  BE->>R: 缓存实时题目与追问
-  FE->>BE: WebSocket 传输语音与答题事件
-  BE->>AI: 实时转写、理解与评分
-  BE->>DB: 保存答题记录和评分结果
-  FE->>S: 展示结果分析
+  T->>BE: 创建考核 + 题库
+  BE->>Q: 题目语音预合成任务
+  Q->>AI: TTS
+  S->>BE: POST /front/interview/start（服务端抽题）
+  opt 答辩环节
+    S->>S: 本地录音
+    S->>BE: POST /front/interview/defense（WAV）
+    BE->>Q: 转写任务
+  end
+  loop 每道题 / 追问
+    S->>BE: GET /front/interview/question-audio
+    S->>S: 播放题目 → 本地录音
+    S->>BE: POST /front/interview/answer（WAV，可重试）
+    BE->>Q: 转写任务
+  end
+  S->>BE: POST /front/interview/submit
+  BE->>Q: 评分任务（等待全部转写完成）
+  Q->>AI: ASR / LLM 评分
+  S->>BE: 查看结果
+```
+
+## 测试
+
+```bash
+cd defense-assessment && ./mvnw test        # 单元测试：抽题、面试状态机、WAV 处理、题库校验等
+cd defense-system && npx vue-cli-service build
 ```
 
 ## 常见问题
 
-### 1. 登录后接口提示数据库连接失败
+### 1. 接口提示数据库连接失败
 
-优先检查：
+确认 MySQL 可连通、`DB_JDBC_URL` 正确，且后端是在加载了 `.env.local` 的情况下启动（推荐用 `scripts/start-backend.sh`）。
 
-```bash
-nc -vz -w 3 <mysql-host> <mysql-port>
-```
+### 2. 题目没有声音
 
-如果本地通过 SSH Tunnel 连接远程 MySQL，请确认隧道进程存在、`DB_JDBC_URL` 指向本地转发端口，并且后端是在最新环境变量下启动。
+题目语音在保存题库后由后台任务预生成，教师端列表的 `audioReady` 表示是否已生成；未生成时学生端会现场合成，再失败则使用浏览器朗读，最差直接显示文字，不会卡住面试。请检查 API Key 是否开通 qwen3-tts-flash。
 
-### 2. Redis 连接失败
+### 3. 提交后一直"评估中"
 
-检查 Redis 是否启动：
+评分在后台任务中执行，先等所有录音转写完成再评分。查看 `async_task` 表中对应记录的 `status`、`attempts`、`last_error`；失败超过重试次数后教师可在学习记录中手动重新评分（`/backend/study-record/reanalyze`）。
 
-```bash
-redis-cli ping
-```
+### 4. 录音失败
 
-期望返回：
-
-```text
-PONG
-```
-
-如果使用远程 Redis，请同步修改 `spring.data.redis.*` 和 `JETCACHE_REDIS_URI`。
-
-### 3. PDF 无法上传或预览
-
-检查 OSS 配置是否完整，并确认 Bucket 权限、跨域配置、预签名 URL 有效期与服务端时间一致。
-
-### 4. 实时语音不可用
-
-请确认：
-
-- 浏览器允许麦克风权限。
-- WebSocket 地址配置正确。
-- DashScope API Key 有实时模型调用权限。
-- 所选模型所在地域与 API Key 地域一致。
+浏览器需要允许麦克风权限，且页面必须通过 HTTPS 或 localhost 访问（浏览器只在安全上下文开放麦克风）。
 
 ## 开发建议
 
 - 不要提交 `.env.local`、数据库密码、API Key、OSS 密钥或 SSH 密码。
-- 面试实时链路建议部署在稳定服务器环境，不要让正式学生流程依赖本地 SSH Tunnel。
-- 开源部署建议补充数据库迁移脚本，保证新环境可一键初始化。
-- 生产环境建议将前端静态资源部署到 CDN，并将后端、MySQL、Redis 放在同一私有网络或低延迟网络内。
+- 学生答题链路上不要引入同步的大模型调用；需要 AI 的地方放进 `async_task` 任务。
+- 新增后台任务：实现 `TaskHandler` 并注册为 Bean，处理器必须幂等。
 - 日志中避免打印学生语音原文、密码、Token、API Key 等敏感信息。
 
 ## 许可证

@@ -26,6 +26,8 @@ public class LogAspect {
 
     private static final int MAX_LOG_LENGTH = 1000;
 
+    private static final long SLOW_REQUEST_MS = 1000;
+
     private static final Pattern JSON_SECRET_PATTERN = Pattern.compile(
             "(?i)(\"(?:password|token|authorization|apiKey|api-key|secret|accessKeyId|accessKeySecret)\"\\s*:\\s*\")([^\"]*)(\")");
 
@@ -37,25 +39,38 @@ public class LogAspect {
         MethodSignature signature = (MethodSignature) joinPoint.getSignature();
         String methodName = signature.getMethod().getName();
         String className = joinPoint.getTarget().getClass().getSimpleName();
-        Object[] args = joinPoint.getArgs();
-        List<Object> params = Stream.of(args).filter(item -> item != null
-                && !(item instanceof HttpServletRequest)
-                && !(item instanceof HttpServletResponse)
-                && !(item instanceof MultipartFile)).toList();
-        log.info("Method {}.{}() called with args: {}", className, methodName, sanitizeForLog(JSONUtil.toJsonStr(params)));
-
         long startTime = System.currentTimeMillis();
-        Object result = null; // 执行目标方法
+        if (log.isDebugEnabled()) {
+            log.debug("Method {}.{}() called with args: {}", className, methodName, argsForLog(joinPoint.getArgs()));
+        }
+        Object result = null;
         try {
             result = joinPoint.proceed();
         } finally {
             long duration = System.currentTimeMillis() - startTime;
-            String response = "LoginController".equals(className) && "login".equals(methodName)
-                    ? "\"***\""
-                    : sanitizeForLog(JSONUtil.toJsonStr(result));
-            log.info("Method {}.{}() response {} executed in {}ms", className, methodName, response, duration);
+            // 高并发下序列化每个请求的完整入参和返回值开销很大：默认只记一行摘要，慢请求附带入参，完整内容放到 DEBUG
+            if (duration >= SLOW_REQUEST_MS) {
+                log.warn("Slow request {}.{}() executed in {}ms, args: {}", className, methodName, duration,
+                        argsForLog(joinPoint.getArgs()));
+            } else {
+                log.info("Method {}.{}() executed in {}ms", className, methodName, duration);
+            }
+            if (log.isDebugEnabled()) {
+                String response = "LoginController".equals(className) && "login".equals(methodName)
+                        ? "\"***\""
+                        : sanitizeForLog(JSONUtil.toJsonStr(result));
+                log.debug("Method {}.{}() response {}", className, methodName, response);
+            }
         }
         return result;
+    }
+
+    private static String argsForLog(Object[] args) {
+        List<Object> params = Stream.of(args).filter(item -> item != null
+                && !(item instanceof HttpServletRequest)
+                && !(item instanceof HttpServletResponse)
+                && !(item instanceof MultipartFile)).toList();
+        return sanitizeForLog(JSONUtil.toJsonStr(params));
     }
 
     static String sanitizeForLog(String content) {

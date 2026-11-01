@@ -21,13 +21,13 @@ public class SaTokenConfig implements WebMvcConfigurer {
                 .addPathPatterns("/**")
                 .excludePathPatterns("/login",
                         "/actuator/**",
-                        "/gemini/**",
+                        "/file/raw",
                         "/swagger-ui/**",          // 排除Swagger UI路径
                         "/v3/api-docs/**",       // 排除API文档路径
                         "/swagger-resources/**",   // 新增静态资源路径
                         "/webjars/**",           // 新增WebJAR资源路径
                         "/swagger-ui.html",
-                        "/filetrans/callback/result");
+                        "/error");
     }
 
     @Override

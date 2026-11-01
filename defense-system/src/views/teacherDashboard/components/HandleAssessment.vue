@@ -9,7 +9,7 @@
         formRef?.resetFields();
       }
     "
-    :width="720"
+    :width="860"
     :bodyStyle="{
       maxHeight: 'calc(80vh - 100px)',
       overflowY: 'auto',
@@ -113,7 +113,7 @@
         />
       </FormItem>
       <FormItem
-        label="提问个数"
+        label="每位学生抽题数"
         name="questionCount"
         :rules="[{ required: true, message: '该项为必填项' }]"
         v-if="formState.question"
@@ -147,40 +147,67 @@
           :un-checked-value="false"
         />
       </FormItem>
-      <FormItem
-        name="followUpPrompt"
-        :rules="[{ required: true, message: '该项为必填项' }]"
-        v-if="formState.followUp"
-      >
+      <FormItem v-if="formState.question" name="questions" :rules="[{ validator: validateQuestions }]">
         <template #label>
-          <div class="flex items-center">
-            <span>追问提示词</span>
-            <Button type="link" @click="useTemplate3">使用示例</Button>
+          <div class="flex items-center flex-wrap gap-y-1">
+            <span>题库</span>
+            <span class="ml-2 text-xs text-[#8c8c8c]">
+              学生将从 {{ formState.questions?.length || 0 }} 道题中随机抽取
+              {{ formState.questionCount || 0 }} 道
+            </span>
           </div>
         </template>
-        <Textarea
-          v-model:value="formState.followUpPrompt"
-          :rows="6"
-          placeholder="请输入"
-        />
+        <FormItemRest>
+          <div class="flex flex-wrap gap-2 mb-3">
+            <Button size="small" type="primary" ghost @click="addQuestion">新增题目</Button>
+            <Button size="small" @click="openBulkPaste">批量粘贴</Button>
+            <Button size="small" :loading="draftLoading" @click="generateDraft">
+              AI 生成题目草稿
+            </Button>
+          </div>
+          <div
+            v-if="!formState.questions?.length"
+            class="rounded-lg border border-dashed border-[#d9d9d9] py-6 text-center text-[#8c8c8c]"
+          >
+            暂无题目，请新增、批量粘贴或使用 AI 生成草稿
+          </div>
+          <div
+            v-for="(item, index) in formState.questions"
+            :key="item.__key"
+            class="rounded-lg border border-[#f0f0f0] bg-[#fafafa] p-3 mb-3"
+          >
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-medium">第 {{ index + 1 }} 题</span>
+              <Space size="small">
+                <Button size="small" type="text" :disabled="index === 0" @click="moveQuestion(index, -1)">上移</Button>
+                <Button
+                  size="small"
+                  type="text"
+                  :disabled="index === formState.questions.length - 1"
+                  @click="moveQuestion(index, 1)"
+                >
+                  下移
+                </Button>
+                <Button size="small" type="text" danger @click="removeQuestion(index)">删除</Button>
+              </Space>
+            </div>
+            <Input v-model:value="item.dimension" placeholder="考核维度（可选），如：专业知识" class="mb-2" />
+            <Textarea v-model:value="item.content" :rows="2" placeholder="题目内容（必填）" class="mb-2" />
+            <Textarea
+              v-model:value="item.referenceAnswer"
+              :rows="2"
+              placeholder="参考答案 / 评分要点（可选，用于 AI 评分）"
+              class="mb-2"
+            />
+            <Textarea
+              v-if="formState.followUp"
+              v-model:value="item.followUpQuestion"
+              :rows="2"
+              placeholder="追问（可选，学生回答本题后提出）"
+            />
+          </div>
+        </FormItemRest>
       </FormItem>
-      <!-- <FormItem
-        name="followUpStandards"
-        :rules="[{ required: true, message: '该项为必填项' }]"
-        v-if="formState.followUp"
-      >
-        <template #label>
-          <div class="flex items-center">
-            <span>追问标准</span>
-            <Button type="link" @click="useTemplate2">使用示例</Button>
-          </div>
-        </template>
-        <Textarea
-          v-model:value="formState.followUpStandards"
-          :rows="6"
-          placeholder="请输入"
-        />
-      </FormItem> -->
       <FormItem
         label="是否显示结果"
         name="showResult"
@@ -305,6 +332,16 @@
       </FormItem> -->
     </Form>
     <Preview ref="previewRef" />
+    <Modal
+      v-model:open="bulkOpen"
+      title="批量粘贴题目"
+      okText="添加"
+      @ok="applyBulkPaste"
+      :width="560"
+    >
+      <div class="text-[#8c8c8c] text-sm mb-2">每行一道题，空行会被忽略。</div>
+      <Textarea v-model:value="bulkText" :rows="10" placeholder="请输入题目，每行一道" />
+    </Modal>
   </Modal>
 </template>
 <script setup lang="ts">
@@ -312,6 +349,7 @@ import {
   Modal,
   Form,
   FormItem,
+  FormItemRest,
   Input,
   Textarea,
   Switch,
@@ -332,7 +370,11 @@ import {
   DownloadOutlined,
   DeleteOutlined,
 } from "@ant-design/icons-vue";
-import { createAssessment, modifyAssessment } from "@/api/assessment";
+import {
+  createAssessment,
+  generateQuestionDraft,
+  modifyAssessment,
+} from "@/api/assessment";
 import { getToken } from "@/utils/auth";
 import { getSchoolClassStudent, getStudentPageList } from "@/api/student";
 import { getFileSign } from "@/api/common";
@@ -434,6 +476,7 @@ const submit = () => {
           ),
         studentIds,
         schoolClassList,
+        questions: formState.value?.question ? normalizeQuestions() : [],
       };
       if (detail.value?.id) {
         await modifyAssessment({
@@ -472,8 +515,7 @@ defineExpose({
       question: false,
       showResult: false,
       assessmentRequirements: "",
-      followUpPrompt: "",
-      // followUpStandards: "",
+      questions: [],
       assessmentFiles: [],
       allStudent: undefined,
       participatingStudents: [],
@@ -482,6 +524,9 @@ defineExpose({
       needAppoint: true,
     };
     Object.assign(formState.value, e as any);
+    formState.value.questions = (e?.questions || []).map((item: Recordable) =>
+      createQuestion(item)
+    );
     if (e?.participatingStudents?.length) {
       formState.value.participatingStudents = e?.participatingStudents?.map(
         (item: { id: number }) => item?.id
@@ -563,28 +608,121 @@ const useTemplate = () => {
 1.结论需体现历史唯物主义方法论，辩证分析马克思劳动价值的当代价值
 2.评分标准：4-5分：得出马克思主义劳动价值论未过时的结论，并辩证看待人工智能对社会历史发展的影响；2-3分：简单肯定/否定，缺乏矛盾分析；0-1分：脱离马克思主义立场，武断认为人工智能的出现否定或证伪了马克思劳动价值理论`;
 };
-const useTemplate2 = () => {
-  formState.value.followUpStandards = `【面试官分析框架】
+let questionKey = 0;
+function createQuestion(item: Recordable = {}): Recordable {
+  questionKey += 1;
+  return {
+    __key: `q-${questionKey}`,
+    id: item?.id,
+    dimension: item?.dimension || "",
+    content: item?.content || "",
+    referenceAnswer: item?.referenceAnswer || "",
+    followUpQuestion: item?.followUpQuestion || "",
+  };
+}
 
-1. 回答分析 (Answer Analysis): 在你内心（不要直接输出），根据以下四点对候选人的回答进行评估：
-
-完整性 (STAR原则): 回答是否清晰地描述了情境(S)、我的任务(T)、我的行动(A)和可量化的结果(R)？缺少了哪个环节？
-
-深度 (Depth): 回答是停留在“做了什么”(What)，还是深入解释了“为什么这么做”(Why)和“具体怎么做到的”(How)？
-
-具体性 (Specificity): 回答是使用了具体的例子和数据来支撑，还是充满了模糊、笼统的表述？
-
-相关性 (Relevance): 回答是否精准地回应了我的问题核心？
-
-2. 决策 (Decision): 基于你的分析，做出以下两种决策中的一种：
-
-[追问]: 如果回答在上述任意一点上存在明显不足（例如，缺少结果、没有解释原因、过于笼统）。
-
-[通过]: 如果回答结构完整、有深度、有细节，可以进入下一个话题。`;
+const addQuestion = () => {
+  formState.value.questions = [...(formState.value.questions || []), createQuestion()];
 };
 
-const useTemplate3 = () => {
-  formState.value.followUpPrompt = `若用户启用“追问”功能，可在题目后附加一个追问问题；该追问必须与原题在考查主题或知识范畴上保持相似，但不得以原题的答案、结论或事实判断为前提，不得存在逻辑因果、条件依赖、推导关系或隐含预设；`;
+const removeQuestion = (index: number) => {
+  formState.value.questions.splice(index, 1);
+};
+
+const moveQuestion = (index: number, offset: number) => {
+  const list = formState.value.questions;
+  const target = index + offset;
+  if (target < 0 || target >= list.length) return;
+  [list[index], list[target]] = [list[target], list[index]];
+};
+
+const bulkOpen = ref(false);
+const bulkText = ref("");
+const openBulkPaste = () => {
+  bulkText.value = "";
+  bulkOpen.value = true;
+};
+const applyBulkPaste = () => {
+  const lines = bulkText.value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (!lines.length) {
+    message.warning("请输入至少一道题目");
+    return;
+  }
+  formState.value.questions = [
+    ...(formState.value.questions || []),
+    ...lines.map((content) => createQuestion({ content })),
+  ];
+  bulkOpen.value = false;
+  message.success(`已添加 ${lines.length} 道题`);
+};
+
+const draftLoading = ref(false);
+const generateDraft = async () => {
+  if (!formState.value.theme && !formState.value.assessmentCriteria) {
+    message.warning("请先填写考核主题或考核标准，AI 将据此出题");
+    return;
+  }
+  draftLoading.value = true;
+  try {
+    const res = await generateQuestionDraft({
+      theme: formState.value.theme,
+      assessmentRequirements: formState.value.assessmentRequirements,
+      assessmentCriteria: formState.value.assessmentCriteria,
+      count: Math.max((formState.value.questionCount || 0) * 2, 5),
+      assessmentFiles: buildAssessmentFiles(),
+    });
+    const items: Recordable[] = res?.data || [];
+    formState.value.questions = [
+      ...(formState.value.questions || []),
+      ...items.map((item) => createQuestion({ ...item, id: undefined })),
+    ];
+    message.success(`已生成 ${items.length} 道题目草稿，请审核后保存`);
+  } catch (error) {
+    // 错误提示由请求拦截器统一展示
+  } finally {
+    draftLoading.value = false;
+  }
+};
+
+function buildAssessmentFiles() {
+  return (formState.value?.assessmentFiles || [])
+    .filter((item: Recordable) => item?.response?.data?.url)
+    .map((item: Recordable) => ({
+      fileUrl: item?.response?.data?.url,
+      fileSize: item?.size,
+      fileName: item?.response?.data?.fileName,
+    }));
+}
+
+function normalizeQuestions() {
+  return (formState.value?.questions || []).map((item: Recordable) => ({
+    id: item.id,
+    dimension: item.dimension?.trim() || undefined,
+    content: item.content?.trim(),
+    referenceAnswer: item.referenceAnswer?.trim() || undefined,
+    followUpQuestion: formState.value?.followUp
+      ? item.followUpQuestion?.trim() || undefined
+      : undefined,
+  }));
+}
+
+const validateQuestions = async () => {
+  const list: Recordable[] = formState.value?.questions || [];
+  if (!list.length) {
+    return Promise.reject("请至少添加一道题目");
+  }
+  const emptyIndex = list.findIndex((item) => !item.content?.trim());
+  if (emptyIndex >= 0) {
+    return Promise.reject(`第 ${emptyIndex + 1} 题内容不能为空`);
+  }
+  const count = formState.value?.questionCount || 0;
+  if (list.length < count) {
+    return Promise.reject(`题库题目数（${list.length}）不能少于每位学生抽题数（${count}）`);
+  }
+  return Promise.resolve();
 };
 
 const downFile = (e: Recordable) => {

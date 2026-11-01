@@ -15,7 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import system.assessment.defense.application.dto.*;
 import system.assessment.defense.application.dto.backed.*;
-import system.assessment.defense.application.manage.OssManager;
+import system.assessment.defense.application.service.interview.QuestionBankService;
 import system.assessment.defense.domain.event.SettingCreateOrUpdateEvent;
 import system.assessment.defense.infrastructure.emuns.ErrorCodeEnums;
 import system.assessment.defense.infrastructure.exception.BusinessException;
@@ -41,7 +41,7 @@ public class AssessmentAppService {
 
     private static final Object OBJECT = new Object();
 
-    private static final ThreadPoolExecutor EXECUTOR = new ThreadPoolExecutor(4, 10, 1000, TimeUnit.SECONDS, new ArrayBlockingQueue<>(1000), new ThreadPoolExecutor.DiscardPolicy());
+    private static final ThreadPoolExecutor EXECUTOR = new ThreadPoolExecutor(4, 10, 1000, TimeUnit.SECONDS, new ArrayBlockingQueue<>(1000), new ThreadPoolExecutor.CallerRunsPolicy());
 
     private final UserService userService;
 
@@ -59,7 +59,7 @@ public class AssessmentAppService {
 
     private final StudentAssessmentAppointmentService studentAssessmentAppointmentService;
 
-    private final OssManager ossManager;
+    private final QuestionBankService questionBankService;
 
     private final ApplicationEventPublisher publisher;
 
@@ -69,6 +69,7 @@ public class AssessmentAppService {
         createCmd.check();
         AssessmentSettingPO assessmentSettingPo = createCmd.toPO();
         assessmentSettingService.save(assessmentSettingPo);
+        questionBankService.saveQuestions(assessmentSettingPo.getId(), createCmd.getQuestions());
 
         List<Integer> inviteTeachers = createCmd.getInviteTeachers();
         List<SchoolClassStudentSaveCmd> schoolClassList = createCmd.getSchoolClassList();
@@ -158,6 +159,7 @@ public class AssessmentAppService {
             studentAssessmentAppointmentService.remove(Wrappers.lambdaQuery(StudentAssessmentAppointmentPO.class)
                     .eq(StudentAssessmentAppointmentPO::getAssessmentId, assessmentSetting.getId()));
         }
+        questionBankService.saveQuestions(id, modifyCmd.getQuestions());
         publisher.publishEvent(new SettingCreateOrUpdateEvent(OBJECT, participatingStudents));
         return assessmentSettingService.updateById(participatingStudents);
     }
@@ -223,9 +225,13 @@ public class AssessmentAppService {
             // 存储学生信息的映射表，用于后续快速查找
             Map<Integer, UserPO> studentMap = studentMapFuture.get();
 
+            Map<Integer, List<QuestionItemDTO>> questionMap = questionBankService.listQuestions(
+                    records.stream().map(AssessmentSettingPO::getId).toList());
+
             // 转换 PO 为 DTO，并填充参与学生信息
             return poPage.convert(item -> {
                 AssessmentSettingsDTO settingDTO = BeanUtil.copyProperties(item, AssessmentSettingsDTO.class, "participatingStudents", "assessmentFiles");
+                settingDTO.setQuestions(questionMap.getOrDefault(item.getId(), List.of()));
                 String assessmentFiles = item.getAssessmentFiles();
                 if (StrUtil.isNotBlank(assessmentFiles)) {
                     List<FileDTO> fileDTOS = JSONUtil.toList(assessmentFiles, FileDTO.class);
@@ -304,6 +310,7 @@ public class AssessmentAppService {
                 .eq(StudentAssessmentRecordPO::getAssessmentId, deleteCmd.getId()));
         questionAnswerService.remove(Wrappers.lambdaQuery(StudentAssessmentQuestionAnswerPO.class)
                 .eq(StudentAssessmentQuestionAnswerPO::getAssessmentId, deleteCmd.getId()));
+        questionBankService.deleteByAssessment(deleteCmd.getId());
         return assessmentSettingService.removeById(deleteCmd.getId());
     }
 

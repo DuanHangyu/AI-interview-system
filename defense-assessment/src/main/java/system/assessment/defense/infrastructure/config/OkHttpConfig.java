@@ -3,32 +3,34 @@ package system.assessment.defense.infrastructure.config;
 import okhttp3.ConnectionPool;
 import okhttp3.OkHttpClient;
 import okhttp3.Protocol;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-/**
- * @Author taoHouChao
- * @Date 12:40 2025/5/19
- */
 @Configuration
 public class OkHttpConfig {
 
+    /**
+     * 调用百炼的 HTTP 客户端。超时要短到能及时失败、长到容纳一次长文本评分；
+     * 失败由调用方按退避策略重试，而不是让请求挂起几分钟占住线程。
+     */
     @Bean
-    public OkHttpClient okHttpClient() {
-        // 连接池：最多 5 个空闲连接，存活 5 分钟
-        ConnectionPool connectionPool = new ConnectionPool(5, 5, TimeUnit.MINUTES);
-
+    public OkHttpClient okHttpClient(@Value("${http-client.connect-timeout-seconds:10}") long connectTimeout,
+                                     @Value("${http-client.read-timeout-seconds:180}") long readTimeout,
+                                     @Value("${http-client.call-timeout-seconds:240}") long callTimeout) {
         return new OkHttpClient.Builder()
-                .connectionPool(connectionPool)
-                .connectTimeout(10, TimeUnit.MINUTES)      // 连接建立
-                .readTimeout(6, TimeUnit.MINUTES)        // 读取响应（语音识别较慢）
-                .writeTimeout(3, TimeUnit.MINUTES)       // 上传音频
-                .callTimeout(9, TimeUnit.MINUTES)        // 整个调用超时（防止 hang 住）
-                .retryOnConnectionFailure(true)           // TCP 层重连
-                .protocols(Arrays.asList(Protocol.HTTP_2, Protocol.HTTP_1_1)) // 显式支持 HTTP/2
+                .connectionPool(new ConnectionPool(64, 5, TimeUnit.MINUTES))
+                .connectTimeout(connectTimeout, TimeUnit.SECONDS)
+                .readTimeout(readTimeout, TimeUnit.SECONDS)
+                .writeTimeout(60, TimeUnit.SECONDS)
+                .callTimeout(callTimeout, TimeUnit.SECONDS)
+                .retryOnConnectionFailure(true)
+                // 只用 HTTP/1.1：HTTP/2 会把所有并发请求复用到同一条 TCP 连接上，
+                // 多个几百 KB 的音频请求同时上传时互相抢占流控窗口，导致大量超时
+                .protocols(List.of(Protocol.HTTP_1_1))
                 .build();
     }
 }

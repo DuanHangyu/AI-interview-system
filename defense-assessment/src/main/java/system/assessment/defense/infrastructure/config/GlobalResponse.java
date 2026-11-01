@@ -24,8 +24,9 @@ public class GlobalResponse implements ResponseBodyAdvice<Object> {
     // be wrapped as {code,message,data} JSON (otherwise the committed stream throws).
     private static final Set<String> excludePath = Set.of(
             "/v3/api-docs",
-            "/gemini/generate-voice",
+            "/front/interview/question-audio",
             "/file/preview",
+            "/file/raw",
             "/backend/student/export-template",
             "/backend/student/export",
             "/backend/study-record/export-record"

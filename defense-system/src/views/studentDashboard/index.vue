@@ -1022,23 +1022,8 @@ const startFn = async (e: Recordable) => {
     // 时间接口失败时使用本地已缓存时间，避免阻断考核入口。
   }
   if (serverTime.value?.isBefore(dayjs(e?.timePeriod))) return;
-  if (e?.defense && e?.question) {
-    if (e?.finishDefense) {
-      router.push(`/question?id=${e?.id}`);
-    } else {
-      router.push(`/dashboard?id=${e?.id}`);
-    }
-  } else if (e?.defense) {
-    if (!e?.finishDefense) {
-      router.push(`/dashboard?id=${e?.id}`);
-    } else {
-      router.push({
-        name: "ResultOverPage",
-      });
-    }
-  } else {
-    router.push(`/question?id=${e?.id}`);
-  }
+  // 面试页根据服务端状态自动恢复到答辩 / 问答 / 提交阶段
+  router.push({ name: "InterviewPage", query: { id: e?.id } });
 };
 
 const hasAvailableAppointmentTimes = (item?: Recordable | null) => {

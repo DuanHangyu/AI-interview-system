@@ -12,8 +12,7 @@ import { useRoute } from "vue-router";
 
 const route = useRoute();
 const fullscreenRouteNames = new Set([
-  "Dashboard",
-  "QuestionPage",
+  "InterviewPage",
   "ResultPage",
   "ResultOverPage",
 ]);

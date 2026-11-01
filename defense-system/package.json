@@ -5,7 +5,8 @@
   "scripts": {
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
-    "build:formal": "vue-cli-service build --mode formal"
+    "build:formal": "vue-cli-service build --mode formal",
+    "build:staging": "vue-cli-service build --mode staging"
   },
   "dependencies": {
     "@ant-design/icons-vue": "^7.0.1",
@@ -17,7 +18,6 @@
     "markdown-it": "^14.1.0",
     "markdown-it-highlightjs": "^4.2.0",
     "nprogress": "^0.2.0",
-    "pcm-player": "^0.0.18",
     "pinia": "^3.0.2",
     "vue": "^3.2.13",
     "vue-router": "^4.0.3",
