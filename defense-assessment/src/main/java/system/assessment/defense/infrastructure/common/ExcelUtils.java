@@ -17,6 +17,7 @@ import java.io.InputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @USER taoHouChao
@@ -62,6 +63,30 @@ public class ExcelUtils {
 
             ServletOutputStream out = response.getOutputStream();
             writer.flush(out, true);
+        }
+    }
+
+    /**
+     * 按行导出：每行是“列名 → 值”的有序 Map（各行列名相同），用于列数不固定的表格（如按评分维度分列）
+     */
+    public static void exportRows(List<Map<String, Object>> rows, String excelName) {
+        HttpServletResponse response = getResponse();
+        response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        String encoded = URLEncoder.encode(excelName + ".xlsx", StandardCharsets.UTF_8).replace("+", "%20");
+        response.setHeader("Content-Disposition", "attachment; filename*=UTF-8''" + encoded);
+        try (ExcelWriter writer = ExcelUtil.getWriter(true)) {
+            if (rows.isEmpty()) {
+                writer.writeHeadRow(List.of("没有符合条件的记录"));
+            } else {
+                writer.write(rows, true);
+                int columns = rows.get(0).size();
+                for (int i = 0; i < columns; i++) {
+                    writer.setColumnWidth(i, 14);
+                }
+            }
+            writer.flush(response.getOutputStream(), true);
+        } catch (IOException e) {
+            log.error("导出 Excel 失败", e);
         }
     }
 

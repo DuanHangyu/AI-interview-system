@@ -12,11 +12,13 @@ import org.springframework.web.multipart.MultipartFile;
 import system.assessment.defense.application.dto.FollowUpItemDTO;
 import system.assessment.defense.application.dto.interview.InterviewStateDTO;
 import system.assessment.defense.application.dto.interview.InterviewStateDTO.CurrentQuestion;
+import system.assessment.defense.application.service.exam.ExamSessionService;
 import system.assessment.defense.application.task.TaskQueue;
 import system.assessment.defense.application.task.TaskTypes;
 import system.assessment.defense.infrastructure.common.WavUtils;
 import system.assessment.defense.infrastructure.emuns.ErrorCodeEnums;
 import system.assessment.defense.infrastructure.exception.BusinessException;
+import system.assessment.defense.infrastructure.repository.dao.po.AssessmentAppointmentSettingPO;
 import system.assessment.defense.infrastructure.repository.dao.po.AssessmentQuestionPO;
 import system.assessment.defense.infrastructure.repository.dao.po.AssessmentSettingPO;
 import system.assessment.defense.infrastructure.repository.dao.po.AssessmentStudentRelationPO;
@@ -68,6 +70,7 @@ public class InterviewService {
     private final StudentAssessmentQuestionAnswerService answerService;
     private final StudentAssessmentAppointmentService appointmentService;
     private final QuestionBankService questionBankService;
+    private final ExamSessionService examSessionService;
     private final FileStorage fileStorage;
     private final TaskQueue taskQueue;
     private final TransactionTemplate transactionTemplate;
@@ -76,7 +79,15 @@ public class InterviewService {
     public InterviewStateDTO state(Integer studentId, Integer assessmentId) {
         AssessmentSettingPO setting = loadSetting(assessmentId);
         StudentAssessmentRecordPO record = recordService.findByStudentIdAndAssessmentId(studentId, assessmentId).orElse(null);
-        return buildState(setting, record, isStarted(record) ? listAnswers(studentId, assessmentId) : List.of());
+        InterviewStateDTO state = buildState(setting, record, isStarted(record) ? listAnswers(studentId, assessmentId) : List.of());
+        state.setServerTime(LocalDateTime.now());
+        if (InterviewStateDTO.NOT_STARTED.equals(state.getStatus()) && isTrue(setting.getNeedAppoint())) {
+            AssessmentAppointmentSettingPO session = examSessionService.sessionOf(assessmentId, studentId);
+            state.setSessionStart(session == null ? null : session.getTimePeriod());
+            state.setSessionEnd(session == null ? null : session.getEndTime());
+            state.setStartBlockedReason(examSessionService.startBlockedReason(setting, studentId, record));
+        }
+        return state;
     }
 
     /**
@@ -95,6 +106,11 @@ public class InterviewService {
         }
         StudentAssessmentRecordPO record = findOrCreateRecord(studentId, assessmentId);
         if (!isStarted(record)) {
+            // 分场次考试：只能在自己场次的时间内开始；已开始的面试断线后随时可以继续
+            String blocked = examSessionService.startBlockedReason(setting, studentId, record);
+            if (blocked != null) {
+                throw new BusinessException(403, blocked);
+            }
             inTransaction(() -> beginInterview(setting, record, studentId));
         }
         return state(studentId, assessmentId);
@@ -226,7 +242,7 @@ public class InterviewService {
                 .orElseThrow(() -> new BusinessException(400, "追问不存在"));
     }
 
-    static InterviewStateDTO buildState(AssessmentSettingPO setting, StudentAssessmentRecordPO record,
+    public static InterviewStateDTO buildState(AssessmentSettingPO setting, StudentAssessmentRecordPO record,
                                         List<StudentAssessmentQuestionAnswerPO> answers) {
         boolean defenseEnabled = isTrue(setting.getDefense());
         boolean questionEnabled = isTrue(setting.getQuestion());

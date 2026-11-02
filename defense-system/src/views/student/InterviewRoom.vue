@@ -62,8 +62,14 @@
           <li>回答提交后不可修改。中途刷新或断网不会丢失已提交的回答，重新进入即可继续。</li>
           <li>请在安静的环境中作答，建议佩戴耳机，避免题目播报被麦克风录入。</li>
         </ol>
+        <div v-if="gate.text" class="gate" :class="{ 'is-locked': gate.locked }">
+          <ClockCircleOutlined />
+          <span>{{ gate.text }}</span>
+        </div>
         <div class="intro-actions">
-          <Button type="primary" size="large" :loading="busy" @click="confirmBegin">开始面试</Button>
+          <Button type="primary" size="large" :loading="busy" :disabled="gate.locked" @click="confirmBegin">
+            {{ gate.locked && gate.countdown ? `${gate.countdown} 后可开始` : "开始面试" }}
+          </Button>
           <Button size="large" @click="router.replace('/student/interviews')">稍后再来</Button>
         </div>
       </section>
@@ -233,7 +239,9 @@ import {
   AudioOutlined,
   CheckCircleFilled,
   CheckOutlined,
+  ClockCircleOutlined,
 } from "@ant-design/icons-vue";
+import dayjs from "dayjs";
 import MarkdownIt from "markdown-it";
 import hljs from "markdown-it-highlightjs";
 import {
@@ -297,6 +305,28 @@ let pageOff = false;
 let finishing = false;
 
 const micHeard = computed(() => recorder.peakLevel.value >= SILENCE_PEAK);
+
+// 分场次考试的候考：场次开始前“开始面试”不可用，按服务器时间倒计时，到点自动解锁（开始时服务端会再次校验）
+const serverOffset = ref(0);
+const gate = computed(() => {
+  const s = state.value;
+  if (!s || s.status !== "NOT_STARTED" || !s.startBlockedReason) return { locked: false, text: "", countdown: "" };
+  const t = now.value + serverOffset.value;
+  const start = s.sessionStart ? dayjs(s.sessionStart) : null;
+  const end = s.sessionEnd ? dayjs(s.sessionEnd) : null;
+  const range = start
+    ? `${start.format("M月D日 HH:mm")}${end ? `–${end.format("HH:mm")}` : ""}`
+    : "";
+  if (start && t < start.valueOf()) {
+    const sec = Math.ceil((start.valueOf() - t) / 1000);
+    const cd = `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`;
+    return { locked: true, text: `你的考试时间是 ${range}，请先检查麦克风，到点后即可开始。`, countdown: sec < 3600 ? cd : "" };
+  }
+  if (start && (!end || t <= end.valueOf())) {
+    return { locked: false, text: `考试时间 ${range}，现在可以开始。`, countdown: "" };
+  }
+  return { locked: true, text: s.startBlockedReason, countdown: "" };
+});
 
 const recordedSeconds = computed(() =>
   recordStartedAt.value ? Math.floor((now.value - recordStartedAt.value) / 1000) : 0
@@ -450,6 +480,7 @@ function goResult() {
 // 根据服务端状态推进页面
 function applyState(next: InterviewState) {
   state.value = next;
+  if (next.serverTime) serverOffset.value = dayjs(next.serverTime).valueOf() - Date.now();
   if (pageOff) return;
   switch (next.status) {
     case "NOT_STARTED":
@@ -1087,6 +1118,29 @@ function onDeviceSelect(value: unknown) {
 .intro-list b {
   color: var(--c-text);
   font-weight: 600;
+}
+
+.gate {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 10px 14px;
+  border: 1px solid #b7cdf0;
+  background: var(--c-primary-soft);
+  color: var(--c-primary);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.gate .anticon {
+  margin-top: 4px;
+}
+
+.gate.is-locked {
+  border-color: #f0d9a8;
+  background: #fffaf0;
+  color: #8a5a00;
 }
 
 .intro-actions {

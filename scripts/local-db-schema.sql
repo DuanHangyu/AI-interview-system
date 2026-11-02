@@ -61,7 +61,8 @@ DROP TABLE IF EXISTS `assessment_appointment_setting`;
 CREATE TABLE `assessment_appointment_setting` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `assessment_id` INT DEFAULT NULL,
-  `time_period` DATETIME DEFAULT NULL,
+  `time_period` DATETIME DEFAULT NULL COMMENT '场次开始时间',
+  `end_time` DATETIME DEFAULT NULL COMMENT '场次结束时间',
   `participant_limit` INT DEFAULT NULL,
   `location` VARCHAR(255) DEFAULT NULL,
   PRIMARY KEY (`id`),
@@ -108,13 +109,15 @@ CREATE TABLE `student_assessment_appointment` (
   `id` INT NOT NULL AUTO_INCREMENT,
   `student_id` INT DEFAULT NULL,
   `assessment_id` INT DEFAULT NULL,
+  `setting_id` INT DEFAULT NULL COMMENT '所在场次 id',
   `appointment_time` DATETIME DEFAULT NULL,
   `time_period` DATETIME DEFAULT NULL,
   `state` INT DEFAULT NULL,
   `punish_state` INT DEFAULT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_saa_student_id` (`student_id`, `assessment_id`),
-  KEY `idx_saa_assessment_id` (`assessment_id`)
+  KEY `idx_saa_assessment_id` (`assessment_id`),
+  KEY `idx_saa_assessment_student` (`assessment_id`, `student_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ---------- student_assessment_question_answer ----------
@@ -138,6 +141,7 @@ CREATE TABLE `student_assessment_question_answer` (
   `follow_answer` TEXT,
   `follow_answer_voice` VARCHAR(1000) DEFAULT NULL,
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
+  `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_saqa_student_assessment_sort` (`student_id`, `assessment_id`, `sort_index`),
   UNIQUE KEY `uk_saqa_parent_follow` (`parent_id`, `follow_index`),

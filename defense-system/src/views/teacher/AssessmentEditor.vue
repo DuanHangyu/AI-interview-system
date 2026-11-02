@@ -295,27 +295,16 @@
           </FormItem>
         </section>
 
-        <!-- 预约 -->
+        <!-- 考试场次 -->
         <section class="card card-pad">
-          <h2 class="sec-title">预约</h2>
-          <div class="flex items-center gap-3">
-            <Switch v-model:checked="form.needAppoint" />
-            <span>学生需要预约面试时段</span>
+          <h2 class="sec-title">考试场次</h2>
+          <div class="muted text-[13px] leading-6">
+            <template v-if="original.needAppoint">
+              已设置考试场次，学生只能在被安排的场次时间内开始面试。
+            </template>
+            <template v-else>当前不分场次，学生随时可以进入面试。</template>
+            需要分批考试时，保存后在面试列表中点击“考场”，添加场次并把学生安排到各场次。
           </div>
-          <div class="muted text-[13px] mt-2">
-            {{
-              form.needAppoint
-                ? "保存后，在面试列表中点击“预约设置”添加时段。学生预约后在对应时段参加面试。"
-                : "学生可以随时进入面试。"
-            }}
-          </div>
-          <Alert
-            v-if="isEdit && original.needAppoint && !form.needAppoint"
-            class="mt-3"
-            type="warning"
-            show-icon
-            message="关闭预约后，已设置的时段和学生的预约记录将被删除。"
-          />
         </section>
       </Form>
     </Spin>
@@ -1101,7 +1090,7 @@ async function save() {
       message.success("已保存");
     } else {
       await createAssessment(params);
-      message.success(form.needAppoint ? "面试已创建，请在列表中设置预约时段" : "面试已创建");
+      message.success("面试已创建，可在列表中点击“考场”设置考试场次");
     }
     router.push("/assessments");
   } finally {

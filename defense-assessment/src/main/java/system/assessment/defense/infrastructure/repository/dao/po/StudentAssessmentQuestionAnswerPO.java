@@ -74,4 +74,9 @@ public class StudentAssessmentQuestionAnswerPO {
     private String answerVoice;
 
     private LocalDateTime createTime;
+
+    /**
+     * 由数据库维护（ON UPDATE），考场监控据此显示学生最后一次作答的时间
+     */
+    private LocalDateTime updateTime;
 }

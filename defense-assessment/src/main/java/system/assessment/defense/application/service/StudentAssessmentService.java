@@ -89,31 +89,6 @@ public class StudentAssessmentService {
     @Value("${scheduler.start:stop}")
     private String runScheduler;
 
-    @Scheduled(cron = "0 0/1 * * * ?")
-    public void schedulerCheckStudentAppointment() {
-        if (!Objects.equals(runScheduler, "start")) {
-            log.info("schedulerCheckStudentAppointment不启动定时任务");
-            return;
-        }
-
-        log.info("schedulerCheckStudentAppointment开始执行");
-        // 预约了，但是没有考试的，需要更新状态
-        List<StudentAssessmentAppointmentPO> notAssessList = studentAppointmentService.list(Wrappers.lambdaQuery(StudentAssessmentAppointmentPO.class)
-                .in(StudentAssessmentAppointmentPO::getState, 0, 1));
-        if (CollectionUtils.isNotEmpty(notAssessList)) {
-            for (StudentAssessmentAppointmentPO assessmentAppointmentPO : notAssessList) {
-                LocalDateTime timePeriod = assessmentAppointmentPO.getTimePeriod();
-                // 如果timePeriod+10分钟小于当前时间，则更新为预约未考核
-                if (timePeriod.plusMinutes(10).isBefore(LocalDateTime.now())) {
-                    log.info("更新预约未考核, assessmentAppointmentPO:{}", assessmentAppointmentPO);
-                    assessmentAppointmentPO.setState(3);
-                    assessmentAppointmentPO.setPunishState(0);
-                    studentAppointmentService.updateById(assessmentAppointmentPO);
-                }
-            }
-        }
-    }
-
     /**
      * 手动重新评分（评分失败或需要重新生成评语时由教师触发），由后台任务异步执行。
      */

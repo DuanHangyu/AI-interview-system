@@ -38,6 +38,11 @@ const routes: RouteRecordRaw[] = [
         meta: { roles: STAFF, title: "面试记录" },
       },
       {
+        path: "records/print",
+        component: () => import("@/views/report/BatchPrint.vue"),
+        meta: { roles: STAFF, title: "批量打印报告", menu: "/records" },
+      },
+      {
         path: "records/:recordId",
         component: () => import("@/views/report/TeacherReport.vue"),
         meta: { roles: STAFF, title: "面试报告", menu: "/records" },
@@ -56,6 +61,11 @@ const routes: RouteRecordRaw[] = [
         path: "assessments/:id/edit",
         component: () => import("@/views/teacher/AssessmentEditor.vue"),
         meta: { roles: STAFF, title: "编辑面试", menu: "/assessments" },
+      },
+      {
+        path: "assessments/:id/exam",
+        component: () => import("@/views/teacher/ExamMonitor.vue"),
+        meta: { roles: STAFF, title: "考场", menu: "/assessments" },
       },
       {
         path: "students",

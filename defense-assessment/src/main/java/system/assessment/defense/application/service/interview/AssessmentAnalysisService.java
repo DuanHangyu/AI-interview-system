@@ -78,6 +78,8 @@ public class AssessmentAnalysisService {
         }
         recordService.update(Wrappers.lambdaUpdate(StudentAssessmentRecordPO.class)
                 .set(StudentAssessmentRecordPO::getDefenseResult, JSONUtil.toJsonStr(result))
+                .set(StudentAssessmentRecordPO::getScore, result.getValue().stream()
+                        .map(v -> v.getValue() == null ? 0 : v.getValue()).mapToInt(Integer::intValue).sum())
                 .set(StudentAssessmentRecordPO::getState, RECORD_DONE)
                 .set(StudentAssessmentRecordPO::getReAnalysis, false)
                 .set(StudentAssessmentRecordPO::getUpdateTime, LocalDateTime.now())

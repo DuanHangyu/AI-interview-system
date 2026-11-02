@@ -32,6 +32,9 @@ public class AssessmentAppointmentSettingPO {
     @Schema(description = "开始时间")
     private LocalDateTime timePeriod;
 
+    @Schema(description = "结束时间，之后不能再开始面试（已开始的可以答完）")
+    private LocalDateTime endTime;
+
     @Schema(description = "该时间段内的限制人数")
     private Integer participantLimit;
 

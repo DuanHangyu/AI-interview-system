@@ -58,8 +58,14 @@ public class StudyRecordController {
 
     @PostMapping("/export-record")
     @Operation(summary = "导出学习记录")
-    public void exportRecordExcel(@RequestBody StudentRecordExcelQuery excelQuery){
-        studyRecordService.exportRecordExcel(excelQuery);
+    public void exportRecordExcel(@RequestBody StudyRecordPagingQuery query){
+        studyRecordService.exportRecordExcel(query);
+    }
+
+    @PostMapping("/ids")
+    @Operation(summary = "按筛选条件返回全部记录 id（批量打印报告、报告翻页）")
+    public java.util.List<Integer> recordIds(@RequestBody StudyRecordPagingQuery query){
+        return studyRecordService.recordIds(query);
     }
 
     @PostMapping("/retake")

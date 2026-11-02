@@ -22,6 +22,15 @@ public class StudyRecordDTO {
     @Schema(description = "学习记录id")
     private Integer id;
 
+    @Schema(description = "面试 id")
+    private Integer assessmentId;
+
+    @Schema(description = "AI 评分")
+    private Integer aiScore;
+
+    @Schema(description = "所在场次，如“6月10日 09:00–10:00”")
+    private String sessionLabel;
+
     @Schema(description = "学生姓名")
     private String studentName;
 

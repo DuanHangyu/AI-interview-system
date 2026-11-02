@@ -66,3 +66,12 @@ export function reviewRecord(data: {
     data,
   });
 }
+
+// 按筛选条件返回全部记录 id（批量打印报告、报告翻页）
+export function getStudyRecordIds(data: Record<string, any>) {
+  return request({
+    url: "/backend/study-record/ids",
+    method: "post",
+    data,
+  });
+}

@@ -3,285 +3,187 @@
     <div class="page-head">
       <div>
         <h1 class="page-title">我的面试</h1>
-        <p class="page-desc">参加已安排的面试，或预约需要选择时间的面试</p>
+        <p class="page-desc">请在老师安排的考试时间内进入面试，可以提前 10 分钟进入候考检查麦克风</p>
       </div>
-      <Button @click="refresh"><ReloadOutlined /> 刷新</Button>
+      <Button :loading="loading" @click="load"><ReloadOutlined /> 刷新</Button>
     </div>
 
-    <div class="stats">
-      <button
-        v-for="s in statCards"
-        :key="s.key"
-        type="button"
-        class="stat card"
-        :class="{ 'is-active': tab === s.key }"
-        @click="onStat(s.key)"
-      >
-        <span class="stat-label">{{ s.label }}</span>
-        <span class="stat-value num">{{ s.value }}</span>
-      </button>
-    </div>
-
-    <div class="card mt-4">
-      <Tabs v-model:activeKey="tab" class="list-tabs" @change="onTabChange">
-        <TabPane key="todo" tab="待参加" />
-        <TabPane key="appoint" tab="待预约" />
-        <TabPane key="analysis" tab="评分中" />
+    <div class="card">
+      <Tabs v-model:activeKey="tab" class="list-tabs">
+        <TabPane key="todo" :tab="`待参加（${todo.length}）`" />
+        <TabPane key="done" :tab="`已完成（${done.length}）`" />
       </Tabs>
 
-      <Spin :spinning="loading">
-        <div v-if="!list.length" class="py-16">
-          <Empty :description="emptyText" />
+      <Spin :spinning="loading && !items.length">
+        <div v-if="!shown.length" class="py-16">
+          <Empty :description="tab === 'todo' ? '暂无待参加的面试' : '暂无已完成的面试'" />
         </div>
         <ul v-else class="rows">
-          <li v-for="item in list" :key="item.id" class="row">
+          <li v-for="item in shown" :key="item.assessmentId" class="row">
             <div class="row-main">
-              <div class="row-title">{{ item.theme }}</div>
-              <div class="row-meta">{{ metaText(item) }}</div>
-              <div v-if="tab === 'todo' && item.timePeriod" class="row-slot">
-                <CalendarOutlined />
-                <span class="num">{{ formatTime(item.timePeriod) }}</span>
-                <span v-if="item.location">· {{ item.location }}</span>
+              <div class="row-title">
+                {{ item.theme }}
+                <Tag v-if="item.retake" color="orange" :bordered="false" class="ml-1">重考</Tag>
               </div>
-              <div v-if="tab === 'appoint'" class="row-slot">
+              <div class="row-meta">{{ metaText(item) }}</div>
+              <div v-if="item.sessionStart" class="row-slot">
                 <CalendarOutlined />
-                <span>{{ availableSlots(item) ? `${availableSlots(item)} 个时间段可预约` : "暂无可预约时间段" }}</span>
+                <span>考试时间</span>
+                <span class="num">{{ rangeText(item) }}</span>
+                <span v-if="item.location">· {{ item.location }}</span>
               </div>
             </div>
             <div class="row-side">
-              <template v-if="tab === 'todo'">
-                <Tag v-if="!canStart(item)" color="default" :bordered="false">未到预约时间</Tag>
-                <Popconfirm
-                  v-if="item.timePeriod && !canStart(item)"
-                  title="确认取消本次预约吗？"
-                  ok-text="取消预约"
-                  cancel-text="再想想"
-                  @confirm="cancel(item)"
-                >
-                  <Button>取消预约</Button>
-                </Popconfirm>
-                <Button type="primary" :disabled="!canStart(item)" @click="enter(item)">
-                  {{ item.finishDefense ? "继续面试" : "进入面试" }}
+              <template v-if="view(item).kind === 'start'">
+                <span v-if="view(item).hint" class="hint">{{ view(item).hint }}</span>
+                <Button type="primary" @click="enter(item)">{{ view(item).label }}</Button>
+              </template>
+              <template v-else-if="view(item).kind === 'wait'">
+                <span class="hint num">{{ view(item).hint }}</span>
+                <Button :type="view(item).enterable ? 'primary' : 'default'" :disabled="!view(item).enterable" @click="enter(item)">
+                  {{ view(item).label }}
                 </Button>
               </template>
-              <template v-else-if="tab === 'appoint'">
-                <Button type="primary" :disabled="!availableSlots(item)" @click="openAppoint(item)">预约</Button>
+              <template v-else-if="view(item).kind === 'report'">
+                <Button @click="router.push(`/student/reports/${item.assessmentId}`)">查看报告</Button>
               </template>
-              <template v-else>
-                <span class="muted text-[13px]"><LoadingOutlined class="mr-1" />AI 正在生成报告</span>
-                <Button disabled>查看报告</Button>
-              </template>
+              <span v-else class="hint" :class="view(item).cls">
+                <LoadingOutlined v-if="item.status === 'ANALYZING'" class="mr-1" />{{ view(item).hint }}
+              </span>
             </div>
           </li>
         </ul>
-        <div v-if="total > size" class="flex justify-end px-6 pb-4">
-          <Pagination v-model:current="page" :page-size="size" :total="total" size="small" @change="load" />
-        </div>
       </Spin>
     </div>
-
-    <AppointmentModal v-model:open="appointOpen" :item="appointItem" @success="refresh" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
-import { Button, Empty, Pagination, Popconfirm, Spin, TabPane, Tabs, Tag, message } from "ant-design-vue";
+import { Button, Empty, Spin, TabPane, Tabs, Tag } from "ant-design-vue";
 import { CalendarOutlined, LoadingOutlined, ReloadOutlined } from "@ant-design/icons-vue";
-import dayjs, { Dayjs } from "dayjs";
-import {
-  cancelAppointment,
-  getAppointmentList,
-  getAssessmentAnalysis,
-  getAssessmentStatistic,
-  getAssessmentTodo,
-  getMachineTime,
-} from "@/api/studentAssessment";
-import AppointmentModal from "./components/AppointmentModal.vue";
+import dayjs from "dayjs";
+import { getMyInterviews, type MyInterview } from "@/api/exam";
 
-type TabKey = "todo" | "appoint" | "analysis";
+const EARLY_MINUTES = 10;
 
 const router = useRouter();
-const tab = ref<TabKey>("todo");
-const list = ref<Record<string, any>[]>([]);
-const total = ref(0);
-const page = ref(1);
-const size = 10;
+const tab = ref<"todo" | "done">("todo");
+const items = ref<MyInterview[]>([]);
 const loading = ref(false);
-const stat = ref<Record<string, number>>({});
-const statLoaded = ref(false);
-const serverTime = ref<Dayjs>(dayjs());
-const appointOpen = ref(false);
-const appointItem = ref<Record<string, any> | null>(null);
-let timer: number | undefined;
+const serverOffset = ref(0);
+const now = ref(Date.now());
+let tick: number | undefined;
+let refreshTimer: number | undefined;
 
-const statCards = computed(() => [
-  { key: "todo", label: "待参加", value: statLoaded.value ? stat.value.todo ?? 0 : "—" },
-  { key: "appoint", label: "待预约", value: statLoaded.value ? stat.value.toAppoint ?? 0 : "—" },
-  { key: "analysis", label: "评分中", value: statLoaded.value ? stat.value.analysis ?? 0 : "—" },
-  { key: "done", label: "已完成", value: statLoaded.value ? stat.value.done ?? 0 : "—" },
-]);
+const todo = computed(() => items.value.filter((i) => i.status !== "DONE" && i.status !== "ANALYZING"));
+const done = computed(() => items.value.filter((i) => i.status === "DONE" || i.status === "ANALYZING"));
+const shown = computed(() => (tab.value === "todo" ? todo.value : done.value));
 
-const emptyText = computed(
-  () => ({ todo: "暂无待参加的面试", appoint: "暂无需要预约的面试", analysis: "暂无评分中的面试" }[tab.value])
-);
-
-const fetchers: Record<TabKey, (d: Record<string, any>) => Promise<any>> = {
-  todo: getAssessmentTodo,
-  appoint: getAppointmentList,
-  analysis: getAssessmentAnalysis,
-};
+function serverNow() {
+  return dayjs(now.value + serverOffset.value);
+}
 
 function minutes(sec?: number) {
   if (!sec) return "0 分钟";
   return sec % 60 === 0 ? `${sec / 60} 分钟` : `${sec} 秒`;
 }
 
-function metaText(item: Record<string, any>) {
+function metaText(item: MyInterview) {
   const parts: string[] = [];
   if (item.defense) parts.push(`答辩 ${minutes(item.duration)}`);
   if (item.question) parts.push(`问答 ${item.questionCount ?? 0} 题 · 每题 ${minutes(item.answerTime)}`);
-  if (item.score != null) parts.push(`满分 ${item.score}`);
+  if (item.totalScore != null) parts.push(`满分 ${item.totalScore}`);
   return parts.join(" · ");
 }
 
-function formatTime(t: string) {
-  return t ? dayjs(t).format("YYYY-MM-DD HH:mm") : "-";
+function rangeText(item: MyInterview) {
+  const a = dayjs(item.sessionStart!);
+  const b = item.sessionEnd ? dayjs(item.sessionEnd) : null;
+  return `${a.format("M月D日 HH:mm")}${b ? ` – ${b.format(b.isSame(a, "day") ? "HH:mm" : "M月D日 HH:mm")}` : ""}`;
 }
 
-// 已预约的面试从预约时间开始可以进入；不需要预约的面试随时可以进入
-function canStart(item: Record<string, any>) {
-  return !item.timePeriod || !serverTime.value.isBefore(dayjs(item.timePeriod));
+function countdown(target: dayjs.Dayjs) {
+  const sec = Math.max(0, target.diff(serverNow(), "second"));
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (d > 0) return `${d} 天 ${h} 小时后开始`;
+  if (h > 0) return `${h} 小时 ${m} 分后开始`;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")} 后开始`;
 }
 
-function availableSlots(item: Record<string, any>) {
-  return (item.canAppointmentTimes || []).filter((t: Record<string, any>) => !t.full).length;
+interface RowView {
+  kind: "start" | "wait" | "report" | "text";
+  label?: string;
+  hint?: string;
+  enterable?: boolean;
+  cls?: string;
 }
 
-async function loadServerTime() {
-  try {
-    const res: any = await getMachineTime();
-    if (res?.data) serverTime.value = dayjs(res.data, "YYYY-MM-DD HH:mm:ss");
-  } catch (e) {
-    serverTime.value = dayjs();
-  }
-}
-
-async function loadStat() {
-  try {
-    const res: any = await getAssessmentStatistic();
-    stat.value = res?.data || {};
-    statLoaded.value = true;
-  } catch (e) {
-    // 统计失败不影响列表
+// 按服务器时间在本地推进状态：场次到点后按钮自动变为可用，无需刷新
+function view(item: MyInterview): RowView {
+  const t = serverNow();
+  const start = item.sessionStart ? dayjs(item.sessionStart) : null;
+  const end = item.sessionEnd ? dayjs(item.sessionEnd) : null;
+  let status = item.status;
+  if (status === "WAITING" && start && !t.isBefore(start)) status = "OPEN";
+  if (status === "OPEN" && end && t.isAfter(end)) status = "MISSED";
+  switch (status) {
+    case "IN_PROGRESS":
+      return { kind: "start", label: "继续面试", hint: "面试未完成" };
+    case "OPEN":
+      return { kind: "start", label: "进入面试", hint: end ? `${end.format("HH:mm")} 前开始` : undefined };
+    case "READY":
+      return { kind: "start", label: "进入面试" };
+    case "WAITING": {
+      const enterable = !!start && !t.isBefore(start.subtract(EARLY_MINUTES, "minute"));
+      return { kind: "wait", label: enterable ? "进入候考" : "未到考试时间", hint: start ? countdown(start) : "", enterable };
+    }
+    case "UNSCHEDULED":
+      return { kind: "text", hint: "老师尚未安排考试时间" };
+    case "MISSED":
+      return { kind: "text", hint: "考试时间已过，请联系老师重新安排", cls: "text-fail" };
+    case "ANALYZING":
+      return { kind: "text", hint: "AI 正在生成报告" };
+    case "DONE":
+      return item.showResult ? { kind: "report" } : { kind: "text", hint: "已完成，老师未开放报告" };
+    default:
+      return { kind: "text" };
   }
 }
 
 async function load() {
   loading.value = true;
   try {
-    const res: any = await fetchers[tab.value]({ page: page.value, size });
-    list.value = res?.data?.records || [];
-    total.value = res?.data?.total || 0;
+    const res: any = await getMyInterviews();
+    items.value = res?.data?.items || [];
+    if (res?.data?.serverTime) serverOffset.value = dayjs(res.data.serverTime).valueOf() - Date.now();
   } finally {
     loading.value = false;
   }
 }
 
-function refresh() {
-  loadStat();
-  loadServerTime();
+function enter(item: MyInterview) {
+  router.push({ path: "/interview", query: { id: item.assessmentId } });
+}
+
+onMounted(() => {
   load();
-}
-
-function onTabChange() {
-  page.value = 1;
-  list.value = [];
-  load();
-}
-
-function onStat(key: string) {
-  if (key === "done") {
-    router.push("/student/reports");
-    return;
-  }
-  tab.value = key as TabKey;
-  onTabChange();
-}
-
-async function enter(item: Record<string, any>) {
-  await loadServerTime();
-  if (!canStart(item)) {
-    message.info("还没到预约时间，请稍后再来");
-    return;
-  }
-  router.push({ path: "/interview", query: { id: item.id } });
-}
-
-async function cancel(item: Record<string, any>) {
-  await cancelAppointment(item.id);
-  message.success("已取消预约");
-  refresh();
-}
-
-function openAppoint(item: Record<string, any>) {
-  appointItem.value = item;
-  appointOpen.value = true;
-}
-
-onMounted(async () => {
-  await loadServerTime();
-  loadStat();
-  load();
-  // 在服务器时间基础上本地推进，让“未到预约时间”的按钮按时变为可用
-  timer = window.setInterval(() => {
-    serverTime.value = serverTime.value.add(30, "second");
-  }, 30000);
+  tick = window.setInterval(() => (now.value = Date.now()), 1000);
+  // 评分中的面试完成后自动出现在“已完成”中
+  refreshTimer = window.setInterval(load, 60000);
 });
 
-onUnmounted(() => window.clearInterval(timer));
+onUnmounted(() => {
+  window.clearInterval(tick);
+  window.clearInterval(refreshTimer);
+});
 </script>
 
 <style scoped>
-.stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.stat {
-  display: block;
-  padding: 16px 20px;
-  text-align: left;
-  cursor: pointer;
-  border-top: 3px solid transparent;
-}
-
-.stat:hover,
-.stat.is-active {
-  border-top-color: var(--c-primary);
-}
-
-.stat-label {
-  display: block;
-  font-size: 14px;
-  color: var(--c-text-2);
-}
-
-.stat-value {
-  display: block;
-  margin-top: 6px;
-  font-size: 28px;
-  font-weight: 600;
-  line-height: 34px;
-  color: var(--c-text);
-}
-
-.stat.is-active .stat-value {
-  color: var(--c-primary);
-}
-
 .list-tabs :deep(.ant-tabs-nav) {
   margin: 0;
   padding: 0 24px;
@@ -324,6 +226,7 @@ onUnmounted(() => window.clearInterval(timer));
 
 .row-slot {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   margin-top: 6px;
@@ -335,13 +238,19 @@ onUnmounted(() => window.clearInterval(timer));
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+}
+
+.hint {
+  font-size: 13px;
+  color: var(--c-text-3);
+}
+
+.text-fail {
+  color: var(--c-danger);
 }
 
 @media (max-width: 760px) {
-  .stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
   .row {
     flex-direction: column;
     align-items: flex-start;

@@ -10,6 +10,7 @@ import system.assessment.defense.application.dto.*;
 import system.assessment.defense.application.dto.front.StudentAppointmentCmd;
 import system.assessment.defense.application.dto.front.StudentCancelAppointmentCmd;
 import system.assessment.defense.application.service.StudentAssessmentService;
+import system.assessment.defense.infrastructure.exception.BusinessException;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -83,14 +84,13 @@ public class StudentAssessmentController {
     @PostMapping("/appointment")
     @Operation(summary = "预约考核")
     public Boolean studentAppointment(@RequestBody StudentAppointmentCmd appointmentCmd){
-        int studentId = StpUtil.getLoginIdAsInt();
-        return studentAssessmentService.studentAppointment(studentId, appointmentCmd);
+        // 面试场次改为由老师统一安排
+        throw new BusinessException(400, "面试场次由老师统一安排，如需调整请联系老师");
     }
 
     @PostMapping("/cancel-appointment")
     @Operation(summary = "取消预约")
     public Boolean cancelAppointment(@RequestBody StudentCancelAppointmentCmd cancelAppointmentCmd){
-        int studentId = StpUtil.getLoginIdAsInt();
-        return studentAssessmentService.cancelAppointment(studentId, cancelAppointmentCmd.getAssessmentId());
+        throw new BusinessException(400, "面试场次由老师统一安排，如需调整请联系老师");
     }
 }

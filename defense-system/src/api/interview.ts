@@ -30,6 +30,12 @@ export interface InterviewState {
   total: number;
   answeredCount: number;
   current: InterviewQuestion | null;
+  serverTime?: string;
+  /** 分场次考试、尚未开始时：学生所在场次 */
+  sessionStart?: string | null;
+  sessionEnd?: string | null;
+  /** 暂时不能开始的原因（未到场次时间等），为空表示可以开始 */
+  startBlockedReason?: string | null;
 }
 
 // 录音上传可能较大，给足超时时间

@@ -31,6 +31,17 @@ import system.assessment.defense.infrastructure.repository.dao.service.UserServi
 import system.assessment.defense.application.dto.backed.RecordReviewCmd;
 import system.assessment.defense.application.service.interview.AnswerRows;
 import system.assessment.defense.infrastructure.common.CriteriaParser;
+import system.assessment.defense.application.service.exam.ExamSessionService;
+import system.assessment.defense.application.service.exam.ScoreCalculator;
+import system.assessment.defense.infrastructure.repository.dao.po.AssessmentAppointmentSettingPO;
+import system.assessment.defense.infrastructure.repository.dao.po.StudentAssessmentAppointmentPO;
+import system.assessment.defense.infrastructure.repository.dao.service.AssessmentAppointmentSettingService;
+import system.assessment.defense.infrastructure.repository.dao.service.StudentAssessmentAppointmentService;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Set;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Objects;
@@ -57,98 +68,157 @@ public class StudyRecordService {
 
     private final AssessmentSettingService assessmentSettingService;
 
+    private final StudentAssessmentAppointmentService appointmentService;
+
+    private final AssessmentAppointmentSettingService appointmentSettingService;
+
     /**
-     * 分页查询学习记录列表
-     * <p>
-     * 根据学生姓名和考核主题进行模糊查询，支持分页。如果提供了学生姓名或考核主题，
-     * 将先查询匹配的学生ID列表或考核设置ID列表，再根据这些ID查询学习记录。
-     * 最终将查询结果转换为 {@link StudyRecordDTO} 并返回分页结果。
-     *
-     * @param pagingQuery 分页查询参数对象，包含页码、页面大小、学生姓名和考核主题等查询条件
-     * @return 返回分页的学习记录数据传输对象（{@link StudyRecordDTO}）列表
+     * 面试记录列表：只包含当前教师名下学生的已完成 / 评分中记录。
+     * 得分是从评分结果中计算出来的，所以筛选和排序在内存中完成（单个教师的记录量在数百到数千条，开销很小）。
      */
     @Transactional(readOnly = true)
-    public IPage<StudyRecordDTO> recordList(StudyRecordPagingQuery pagingQuery) {
-        TeacherSummary teacherSummary = userService.findTeacherSummaryById(StpUtil.getLoginIdAsInt()).orElseThrow(() -> new RuntimeException("用户不存在"));
-        List<Integer> studentIds = teacherSummary.getStudentIds();
-        if (CollectionUtils.isEmpty(studentIds)) {
-            return new Page<>(pagingQuery.getPage(), pagingQuery.getSize());
-        }
-        String studentName = pagingQuery.getStudentName();
-        String theme = pagingQuery.getTheme();
-        List<Integer> searchStudentIds = null;
-        List<Integer> assessmentIds = null;
+    public IPage<StudyRecordDTO> recordList(StudyRecordPagingQuery query) {
+        int page = Optional.ofNullable(query.getPage()).filter(p -> p > 0).orElse(1);
+        int size = Optional.ofNullable(query.getSize()).filter(s -> s > 0 && s <= 200).orElse(20);
+        List<RecordRow> rows = filteredRows(query);
+        Page<StudyRecordDTO> result = new Page<>(page, size, rows.size());
+        result.setRecords(rows.stream().skip((long) (page - 1) * size).limit(size).map(RecordRow::toDTO).toList());
+        return result;
+    }
 
-        // 如果提供了学生姓名，则根据姓名模糊查询用户ID列表
-        if (StringUtils.isNotBlank(studentName)) {
-            List<UserPO> users = userService.list(Wrappers.lambdaQuery(UserPO.class)
-                    .like(UserPO::getName, studentName));
-            if (CollectionUtils.isEmpty(users)) {
-                // 如果没有匹配的用户，返回空分页结果
-                return new Page<>(pagingQuery.getPage(), pagingQuery.getSize());
+    /**
+     * 按筛选条件返回全部记录 id（按列表顺序），用于批量打印报告和报告页的“上一份 / 下一份”
+     */
+    @Transactional(readOnly = true)
+    public List<Integer> recordIds(StudyRecordPagingQuery query) {
+        return filteredRows(query).stream().limit(MAX_BATCH).map(r -> r.record().getId()).toList();
+    }
+
+    private static final int MAX_BATCH = 1000;
+
+    /**
+     * 一条面试记录及其关联信息
+     */
+    private record RecordRow(StudentAssessmentRecordPO record, AssessmentSettingPO setting, UserPO user,
+                             AssessmentAppointmentSettingPO session, Integer aiScore, Integer finalScore) {
+
+        Boolean passed() {
+            return finalScore == null || setting.getPassScore() == null ? null : finalScore >= setting.getPassScore();
+        }
+
+        boolean reviewed() {
+            return StringUtils.isNotBlank(record.getTeacherReview());
+        }
+
+        StudyRecordDTO toDTO() {
+            return StudyRecordDTO.builder()
+                    .id(record.getId())
+                    .assessmentId(setting.getId())
+                    .studentName(user.getName())
+                    .theme(setting.getTheme())
+                    .score(aiScore)
+                    .aiScore(aiScore)
+                    .checkScore(record.getCheckScore())
+                    .totalScore(setting.getTotalScore())
+                    .assessmentTime(Optional.ofNullable(record.getStartTime()).orElse(record.getCreateTime()))
+                    .state(record.getState())
+                    .finalScore(finalScore)
+                    .reviewed(reviewed())
+                    .passScore(setting.getPassScore())
+                    .studentAccount(user.getAccount())
+                    .schoolClass(user.getSchoolClass())
+                    .sessionLabel(ExamSessionService.sessionLabel(session))
+                    .build();
+        }
+    }
+
+    private List<RecordRow> filteredRows(StudyRecordPagingQuery query) {
+        TeacherSummary teacherSummary = userService.findTeacherSummaryById(StpUtil.getLoginIdAsInt())
+                .orElseThrow(() -> new BusinessException(ErrorCodeEnums.USER_NOT_FOUND));
+        List<Integer> scope = teacherSummary.getStudentIds();
+        if (CollectionUtils.isEmpty(scope)) {
+            return List.of();
+        }
+        List<Integer> themeIds = null;
+        if (StringUtils.isNotBlank(query.getTheme())) {
+            themeIds = assessmentSettingService.list(Wrappers.lambdaQuery(AssessmentSettingPO.class)
+                            .like(AssessmentSettingPO::getTheme, query.getTheme().trim()))
+                    .stream().map(AssessmentSettingPO::getId).toList();
+            if (themeIds.isEmpty()) {
+                return List.of();
             }
-            searchStudentIds = users.stream().map(UserPO::getId).toList();
         }
+        List<StudentAssessmentRecordPO> records = studentAssessmentService.list(Wrappers.lambdaQuery(StudentAssessmentRecordPO.class)
+                .in(StudentAssessmentRecordPO::getStudentId, scope)
+                .in(query.getState() == null, StudentAssessmentRecordPO::getState, 1, 2)
+                .eq(query.getState() != null, StudentAssessmentRecordPO::getState, query.getState())
+                .eq(query.getAssessmentId() != null, StudentAssessmentRecordPO::getAssessmentId, query.getAssessmentId())
+                .in(themeIds != null, StudentAssessmentRecordPO::getAssessmentId, themeIds)
+                .in(CollectionUtils.isNotEmpty(query.getRecordIds()), StudentAssessmentRecordPO::getId, query.getRecordIds()));
+        if (records.isEmpty()) {
+            return List.of();
+        }
+        Set<Integer> assessmentIds = records.stream().map(StudentAssessmentRecordPO::getAssessmentId).collect(Collectors.toSet());
+        Set<Integer> studentIds = records.stream().map(StudentAssessmentRecordPO::getStudentId).collect(Collectors.toSet());
+        Map<Integer, AssessmentSettingPO> settings = assessmentSettingService.listByIds(assessmentIds).stream()
+                .collect(Collectors.toMap(AssessmentSettingPO::getId, item -> item));
+        Map<Integer, UserPO> users = userService.listByIds(studentIds).stream()
+                .collect(Collectors.toMap(UserPO::getId, item -> item));
+        Map<String, Integer> sessionIdOf = appointmentService.list(Wrappers.lambdaQuery(StudentAssessmentAppointmentPO.class)
+                        .in(StudentAssessmentAppointmentPO::getAssessmentId, assessmentIds)
+                        .in(StudentAssessmentAppointmentPO::getStudentId, studentIds)
+                        .isNotNull(StudentAssessmentAppointmentPO::getSettingId)
+                        .orderByAsc(StudentAssessmentAppointmentPO::getId))
+                .stream().collect(Collectors.toMap(StudentAssessmentAppointmentPO::assessmentIdAndStudentId,
+                        StudentAssessmentAppointmentPO::getSettingId, (a, b) -> b));
+        Map<Integer, AssessmentAppointmentSettingPO> sessions = sessionIdOf.isEmpty() ? Map.of()
+                : appointmentSettingService.listByIds(new HashSet<>(sessionIdOf.values())).stream()
+                .collect(Collectors.toMap(AssessmentAppointmentSettingPO::getId, item -> item));
 
-        // 如果提供了考核主题，则根据主题模糊查询考核设置ID列表
-        if (StringUtils.isNotBlank(theme)) {
-            List<AssessmentSettingPO> assessments = assessmentSettingService.list(Wrappers.lambdaQuery(AssessmentSettingPO.class)
-                    .like(AssessmentSettingPO::getTheme, theme));
-            if (CollectionUtils.isEmpty(assessments)) {
-                // 如果没有匹配的考核设置，返回空分页结果
-                return new Page<>(pagingQuery.getPage(), pagingQuery.getSize());
+        String keyword = StringUtils.trimToNull(query.getStudentName());
+        List<RecordRow> rows = new ArrayList<>();
+        for (StudentAssessmentRecordPO record : records) {
+            AssessmentSettingPO setting = settings.get(record.getAssessmentId());
+            UserPO user = users.get(record.getStudentId());
+            if (setting == null || user == null) {
+                continue;
             }
-            assessmentIds = assessments.stream().map(AssessmentSettingPO::getId).toList();
+            if (keyword != null && !StringUtils.contains(user.getName(), keyword)
+                    && !StringUtils.contains(user.getAccount(), keyword)) {
+                continue;
+            }
+            if (StringUtils.isNotBlank(query.getSchoolClass()) && !Objects.equals(user.getSchoolClass(), query.getSchoolClass())) {
+                continue;
+            }
+            Integer sessionId = sessionIdOf.get(record.assessmentIdAndStudentId());
+            if (query.getSessionId() != null && !Objects.equals(sessionId, query.getSessionId())) {
+                continue;
+            }
+            RecordRow row = new RecordRow(record, setting, user, sessionId == null ? null : sessions.get(sessionId),
+                    ScoreCalculator.aiScore(record), ScoreCalculator.finalScore(record));
+            if (query.getMinScore() != null && (row.finalScore() == null || row.finalScore() < query.getMinScore())) {
+                continue;
+            }
+            if (query.getMaxScore() != null && (row.finalScore() == null || row.finalScore() > query.getMaxScore())) {
+                continue;
+            }
+            if (query.getPassed() != null && !Objects.equals(row.passed(), query.getPassed())) {
+                continue;
+            }
+            if (query.getReviewed() != null && row.reviewed() != query.getReviewed()) {
+                continue;
+            }
+            rows.add(row);
         }
-
-        // 根据学生ID和考核设置ID分页查询学习记录
-        IPage<StudentAssessmentRecordPO> poPage = studentAssessmentService.page(new Page<>(pagingQuery.getPage(), pagingQuery.getSize()),
-                Wrappers.lambdaQuery(StudentAssessmentRecordPO.class)
-                        .in(StudentAssessmentRecordPO::getStudentId, studentIds)
-                        // 已完成和评分中的记录；评分中的记录教师可看到进度、可重新评分
-                        .in(StudentAssessmentRecordPO::getState, 1, 2)
-                        .in(CollectionUtils.isNotEmpty(searchStudentIds), StudentAssessmentRecordPO::getStudentId, searchStudentIds)
-                        .in(CollectionUtils.isNotEmpty(assessmentIds), StudentAssessmentRecordPO::getAssessmentId, assessmentIds)
-                        .orderByDesc(StudentAssessmentRecordPO::getUpdateTime));
-
-        List<StudentAssessmentRecordPO> records = poPage.getRecords();
-
-        // 如果查询到记录，则填充DTO对象并返回
-        if (CollectionUtils.isNotEmpty(records)) {
-            // 提取所有涉及的考核ID和学生ID，用于批量查询详细信息
-            List<Integer> assessmentIdList = records.stream().map(StudentAssessmentRecordPO::getAssessmentId).distinct().toList();
-            List<Integer> studentIdList = records.stream().map(StudentAssessmentRecordPO::getStudentId).distinct().toList();
-
-            // 批量查询考核设置和用户信息，并构建映射表
-            Map<Integer, AssessmentSettingPO> assessmentIdMap = assessmentSettingService.listByIds(assessmentIdList).stream()
-                    .collect(Collectors.toMap(AssessmentSettingPO::getId, item -> item));
-            Map<Integer, UserPO> userIdMap = userService.listByIds(studentIdList).stream()
-                    .collect(Collectors.toMap(UserPO::getId, item -> item));
-
-            // 将PO对象转换为DTO对象
-            return poPage.convert(item -> {
-                AssessmentSettingPO setting = assessmentIdMap.get(item.getAssessmentId());
-                UserPO user = userIdMap.get(item.getStudentId());
-                return StudyRecordDTO.builder()
-                        .id(item.getId())
-                        .studentName(user.getName())
-                        .theme(setting.getTheme())
-                        .score(item.getScore())
-                        .checkScore(item.getCheckScore())
-                        .totalScore(setting.getTotalScore())
-                        .assessmentTime(Optional.ofNullable(item.getStartTime()).orElse(item.getCreateTime()))
-                        .state(item.getState())
-                        .finalScore(item.frontScore())
-                        .reviewed(StringUtils.isNotBlank(item.getTeacherReview()))
-                        .passScore(setting.getPassScore())
-                        .studentAccount(user.getAccount())
-                        .schoolClass(user.getSchoolClass())
-                        .build();
-            });
-        }
-
-        // 如果没有记录，返回空分页结果
-        return new Page<>(pagingQuery.getPage(), pagingQuery.getSize());
+        boolean asc = "asc".equalsIgnoreCase(query.getSortOrder());
+        Comparator<RecordRow> byTime = Comparator.comparing(
+                r -> Optional.ofNullable(r.record().getStartTime()).orElse(r.record().getCreateTime()),
+                Comparator.nullsFirst(Comparator.naturalOrder()));
+        Comparator<RecordRow> order = "score".equalsIgnoreCase(query.getSortField())
+                ? Comparator.comparing(RecordRow::finalScore, Comparator.nullsFirst(Comparator.naturalOrder())).thenComparing(byTime)
+                : byTime;
+        rows.sort(asc ? order : order.reversed());
+        return rows;
     }
 
     /**
@@ -226,112 +296,65 @@ public class StudyRecordService {
                 .eq(StudentAssessmentRecordPO::getId, changeScoreCmd.getId()));
     }
 
-    public void exportRecordExcel(StudentRecordExcelQuery excelQuery) {
-        List<Integer> recordIds = excelQuery.getRecordIds();
-        String theme = excelQuery.getTheme();
-        if (StringUtils.isNotBlank(theme)) {
-            List<AssessmentSettingPO> settings = assessmentSettingService.list(Wrappers.lambdaQuery(AssessmentSettingPO.class)
-                    .like(AssessmentSettingPO::getTheme, theme));
-            if (CollectionUtils.isEmpty(settings)) {
-                return;
+    /**
+     * 导出成绩 Excel：指定 recordIds 时导出这些记录，否则导出当前筛选条件下的全部记录。
+     * 每个评分维度单独一列，便于在 Excel 中按维度统计。
+     */
+    @Transactional(readOnly = true)
+    public void exportRecordExcel(StudyRecordPagingQuery query) {
+        List<RecordRow> rows = filteredRows(query);
+        // 维度列：按出现顺序汇总所有记录的维度
+        Map<String, Integer> dimensionMax = new LinkedHashMap<>();
+        Map<Integer, Map<String, Integer>> dimensionScores = new HashMap<>();
+        for (RecordRow row : rows) {
+            AssessmentEvaluationDTO evaluation = ScoreCalculator.evaluation(row.record());
+            TeacherReviewBO review = StudentAssessmentService.parseReview(row.record().getTeacherReview());
+            Map<String, Integer> reviewed = review == null || review.getDimensions() == null ? Map.of()
+                    : review.getDimensions().stream().filter(d -> d.getName() != null && d.getScore() != null)
+                    .collect(Collectors.toMap(TeacherReviewBO.DimensionScore::getName,
+                            TeacherReviewBO.DimensionScore::getScore, (a, b) -> b));
+            Map<String, Integer> scores = new HashMap<>();
+            for (AnalysisDTO d : ScoreCalculator.dimensions(evaluation)) {
+                if (d.getName() == null) {
+                    continue;
+                }
+                dimensionMax.merge(d.getName(), d.getMaxScore() == null ? 0 : d.getMaxScore(), Math::max);
+                scores.put(d.getName(), reviewed.getOrDefault(d.getName(), d.getScore()));
             }
-            List<Integer> assessmentIds = settings.stream()
-                    .map(AssessmentSettingPO::getId)
-                    .toList();
-            List<StudentAssessmentRecordPO> records = studentAssessmentService.list(Wrappers.lambdaQuery(StudentAssessmentRecordPO.class)
-                    .in(StudentAssessmentRecordPO::getAssessmentId, assessmentIds)
-                    .orderByDesc(StudentAssessmentRecordPO::getId));
-            exportRecords(records, settings);
-        }else {
-            List<StudentAssessmentRecordPO> records = studentAssessmentService.list(Wrappers.lambdaQuery(StudentAssessmentRecordPO.class)
-                    .in(StudentAssessmentRecordPO::getId, recordIds)
-                    .orderByDesc(StudentAssessmentRecordPO::getId));
-            List<Integer> assessmentIds = records.stream()
-                    .map(StudentAssessmentRecordPO::getAssessmentId)
-                    .distinct()
-                    .toList();
-            List<AssessmentSettingPO> settings = assessmentSettingService.listByIds(assessmentIds);
-            exportRecords(records, settings);
+            dimensionScores.put(row.record().getId(), scores);
         }
-    }
-
-    private void exportRecords(List<StudentAssessmentRecordPO> records, List<AssessmentSettingPO> settings) {
-        List<Integer> studentIds = records.stream()
-                .map(StudentAssessmentRecordPO::getStudentId)
-                .distinct()
-                .toList();
-        List<Integer> recordAssessmentIds = records.stream()
-                .map(StudentAssessmentRecordPO::getAssessmentId)
-                .distinct()
-                .toList();
-        List<StudentAssessmentQuestionAnswerPO> questionAnswers = questionAnswerService.list(Wrappers.lambdaQuery(StudentAssessmentQuestionAnswerPO.class)
-                .in(StudentAssessmentQuestionAnswerPO::getAssessmentId, recordAssessmentIds)
-                .in(StudentAssessmentQuestionAnswerPO::getStudentId, studentIds));
-        Map<Integer, Map<Integer, List<StudentAssessmentQuestionAnswerPO>>> assessmentStudentIdMap = questionAnswers.stream()
-                .collect(Collectors.groupingBy(StudentAssessmentQuestionAnswerPO::getAssessmentId, Collectors.groupingBy(StudentAssessmentQuestionAnswerPO::getStudentId)));
-        // 批量查询用户信息
-        Map<Integer, UserPO> studentIdMap = userService.listByIds(studentIds)
-                .stream()
-                .collect(Collectors.toMap(UserPO::getId, item -> item));
-
-        Map<Integer, AssessmentSettingPO> assessmentIdMap = settings.stream()
-                .collect(Collectors.toMap(AssessmentSettingPO::getId, item -> item));
-
-        List<StudentRecordExcelDTO> recordExcels = records.stream()
-                .map(record -> {
-                    AssessmentSettingPO assessmentSettingPO = assessmentIdMap.getOrDefault(record.getAssessmentId(), new AssessmentSettingPO());
-                    UserPO user = studentIdMap.getOrDefault(record.getStudentId(), UserPO.EMPTY_USER);
-                    StudentRecordExcelDTO excelDTO = new StudentRecordExcelDTO();
-                    excelDTO.setStudentName(user.getName());
-                    excelDTO.setIdNumber(user.getAccount());
-                    excelDTO.setTheme(assessmentSettingPO.getTheme());
-                    excelDTO.setTotalScore(assessmentSettingPO.getTotalScore());
-                    excelDTO.setPassScore(assessmentSettingPO.getPassScore());
-                    excelDTO.setScore(record.getScore());
-                    excelDTO.setCheckScore(record.getCheckScore());
-                    excelDTO.setDefenseAnswer(record.getDefenseContent());
-                    List<StudentAssessmentQuestionAnswerPO> matchQuestionAnswers = assessmentStudentIdMap.getOrDefault(record.getAssessmentId(), new HashMap<>()).getOrDefault(record.getStudentId(), Collections.emptyList());
-                    Map<Integer, List<StudentAssessmentQuestionAnswerPO>> followRows = AnswerRows.followUps(matchQuestionAnswers);
-                    StringBuilder questionAnswerBuilder = new StringBuilder();
-                    for (StudentAssessmentQuestionAnswerPO questionAnswer : AnswerRows.mains(matchQuestionAnswers)) {
-                        questionAnswerBuilder
-                                .append("问题：").append(questionAnswer.getQuestion())
-                                .append("\n")
-                                .append("回答：").append(questionAnswer.getAnswer())
-                                .append("\n");
-                        for (StudentAssessmentQuestionAnswerPO follow : followRows.getOrDefault(questionAnswer.getId(), List.of())) {
-                            questionAnswerBuilder
-                                    .append("追问：").append(follow.getQuestion())
-                                    .append("\n")
-                                    .append("追问回答：").append(follow.getAnswer())
-                                    .append("\n");
-                        }
-                        questionAnswerBuilder.append("\n");
-                    }
-                    excelDTO.setQuestionAnswer(questionAnswerBuilder.toString());
-                    String defenseResult = record.getDefenseResult();
-                    AssessmentEvaluationDTO evaluationDTO = JSONUtil.toBean(defenseResult, AssessmentEvaluationDTO.class);
-                    AnalysisBO analysis = evaluationDTO.getAnalysis();
-                    List<AnalysisDTO> analysisList = analysis.getAnalysis();
-                    StringBuilder analysisBuilder = new StringBuilder();
-                    for (AnalysisDTO analysisDTO : analysisList) {
-                        analysisBuilder
-                                .append("考核指标：").append(analysisDTO.getName())
-                                .append("\n")
-                                .append("得分：").append(analysisDTO.getScore())
-                                .append("\n")
-                                .append("评价：").append(analysisDTO.getDescription())
-                                .append("\n")
-                                .append("\n");
-                    }
-                    excelDTO.setAnalysis(analysisBuilder.toString());
-                    excelDTO.setSuggestions(String.join("\n", analysis.getSuggestions()));
-                    excelDTO.setStrengths(String.join("\n", analysis.getStrengths()));
-                    excelDTO.setWeaknesses(String.join("\n", analysis.getWeaknesses()));
-                    excelDTO.setAssessTime(record.getUpdateTime());
-                    return excelDTO;
-                }).toList();
-        ExcelUtils.exportTemplate(recordExcels, "学生记录");
+        DateTimeFormatter time = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        List<Map<String, Object>> sheet = new ArrayList<>();
+        int no = 0;
+        for (RecordRow row : rows) {
+            StudentAssessmentRecordPO record = row.record();
+            AssessmentEvaluationDTO evaluation = ScoreCalculator.evaluation(record);
+            TeacherReviewBO review = StudentAssessmentService.parseReview(record.getTeacherReview());
+            Map<String, Object> line = new LinkedHashMap<>();
+            line.put("序号", ++no);
+            line.put("姓名", row.user().getName());
+            line.put("学号", row.user().getAccount());
+            line.put("班级", row.user().getSchoolClass());
+            line.put("面试名称", row.setting().getTheme());
+            line.put("场次", ExamSessionService.sessionLabel(row.session()));
+            LocalDateTime start = Optional.ofNullable(record.getStartTime()).orElse(record.getCreateTime());
+            line.put("面试时间", start == null ? "" : start.format(time));
+            line.put("状态", Objects.equals(record.getState(), 1) ? "已完成" : "评分中");
+            Map<String, Integer> scores = dimensionScores.getOrDefault(record.getId(), Map.of());
+            dimensionMax.forEach((name, max) -> line.put(max > 0 ? name + "（" + max + "分）" : name,
+                    scores.containsKey(name) ? scores.get(name) : ""));
+            line.put("AI 评分", row.aiScore() == null ? "" : row.aiScore());
+            line.put("最终得分", row.finalScore() == null ? "" : row.finalScore());
+            line.put("满分", row.setting().getTotalScore());
+            line.put("及格分", row.setting().getPassScore());
+            line.put("是否及格", row.passed() == null ? "" : (row.passed() ? "及格" : "不及格"));
+            line.put("已复核", row.reviewed() ? "是" : "否");
+            line.put("复核教师", review == null ? "" : StringUtils.defaultString(review.getReviewerName()));
+            line.put("教师评语", review == null ? "" : StringUtils.defaultString(review.getComment()));
+            line.put("整体评价", evaluation == null ? "" : StringUtils.defaultString(evaluation.getSummary()));
+            sheet.add(line);
+        }
+        ExcelUtils.exportRows(sheet, "面试成绩");
     }
 
     @Transactional(rollbackFor = Exception.class)

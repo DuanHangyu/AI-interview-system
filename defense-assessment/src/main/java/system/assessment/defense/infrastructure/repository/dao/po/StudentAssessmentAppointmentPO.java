@@ -28,6 +28,9 @@ public class StudentAssessmentAppointmentPO {
     @Schema(description = "考核id")
     private Integer assessmentId;
 
+    @Schema(description = "所在场次 id（assessment_appointment_setting.id）")
+    private Integer settingId;
+
     @Schema(description = "预约时间")
     private LocalDateTime appointmentTime;
 

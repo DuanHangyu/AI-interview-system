@@ -3,7 +3,7 @@
     <div class="page-head">
       <div>
         <h1 class="page-title">面试管理</h1>
-        <p class="page-desc">配置面试流程、评分标准与题库，指定参与学生和预约时段</p>
+        <p class="page-desc">配置面试流程、评分标准与题库；在“考场”中安排考试场次、查看考试进度</p>
       </div>
       <Button type="primary" @click="router.push('/assessments/new')">
         <template #icon><PlusOutlined /></template>
@@ -57,8 +57,8 @@
             <span class="num">{{ record.participatingStudents?.length || 0 }}</span> 人
           </template>
           <template v-else-if="column.key === 'appoint'">
-            <Badge v-if="record.needAppoint" status="processing" :text="`需预约 · ${slotCount(record)} 个时段`" />
-            <Badge v-else status="default" text="无需预约" />
+            <Badge v-if="record.needAppoint" status="processing" :text="`${slotCount(record)} 个场次`" />
+            <Badge v-else status="default" text="不分场次" />
           </template>
           <template v-else-if="column.key === 'score'">
             <span class="num">{{ record.totalScore ?? "—" }}</span>
@@ -69,11 +69,8 @@
           </template>
           <template v-else-if="column.key === 'action'">
             <Space :size="4">
+              <Button type="link" size="small" @click="router.push(`/assessments/${record.id}/exam`)">考场</Button>
               <Button type="link" size="small" @click="router.push(`/assessments/${record.id}/edit`)">编辑</Button>
-              <template v-if="record.needAppoint">
-                <Button type="link" size="small" @click="settingsRef?.open(record)">预约设置</Button>
-                <Button type="link" size="small" @click="detailRef?.open(record)">预约情况</Button>
-              </template>
               <Popconfirm
                 title="删除后，该面试的题库和所有学生作答记录都会被删除，确定删除吗？"
                 ok-text="删除"
@@ -91,8 +88,6 @@
       </Table>
     </div>
 
-    <AppointmentSettingsModal ref="settingsRef" @success="load" />
-    <AppointmentDetailDrawer ref="detailRef" />
   </div>
 </template>
 
@@ -102,8 +97,6 @@ import { useRouter } from "vue-router";
 import { Badge, Button, Empty, InputSearch, Popconfirm, Space, Table, Tag, message } from "ant-design-vue";
 import { PlusOutlined } from "@ant-design/icons-vue";
 import { getAssessmentList, removeAssessment } from "@/api/assessment";
-import AppointmentSettingsModal from "./components/AppointmentSettingsModal.vue";
-import AppointmentDetailDrawer from "./components/AppointmentDetailDrawer.vue";
 
 const router = useRouter();
 const theme = ref("");
@@ -112,15 +105,13 @@ const size = ref(10);
 const total = ref(0);
 const rows = ref<Record<string, any>[]>([]);
 const loading = ref(false);
-const settingsRef = ref<InstanceType<typeof AppointmentSettingsModal>>();
-const detailRef = ref<InstanceType<typeof AppointmentDetailDrawer>>();
 
 const columns = [
   { title: "面试名称", key: "theme", ellipsis: true, width: 220 },
   { title: "流程", key: "flow", width: 190 },
   { title: "题库", key: "bank", width: 130 },
   { title: "参与学生", key: "students", width: 90 },
-  { title: "预约", key: "appoint", width: 110 },
+  { title: "场次", key: "appoint", width: 100 },
   { title: "满分 / 及格", key: "score", width: 110 },
   { title: "学生报告", key: "result", width: 90 },
   { title: "操作", key: "action", width: 200, fixed: "right" as const },

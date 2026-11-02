@@ -37,7 +37,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Breadcrumb, BreadcrumbItem, Button, Result, Spin } from "ant-design-vue";
 import { FilePdfOutlined } from "@ant-design/icons-vue";
@@ -66,6 +66,12 @@ async function load() {
   }
   clearTimeout(timer);
   if (detail.value && detail.value.state !== 1) timer = window.setTimeout(load, 8000);
+  // 从报告列表点“导出 PDF”进入时，载入完成后自动打开打印窗口
+  if (visible.value && route.query.print === "1") {
+    router.replace({ query: {} });
+    await nextTick();
+    setTimeout(exportPdf, 300);
+  }
 }
 
 function exportPdf() {

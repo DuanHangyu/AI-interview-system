@@ -3,7 +3,9 @@
     <div class="page-head no-print">
       <div>
         <Breadcrumb>
-          <BreadcrumbItem><router-link to="/records">面试记录</router-link></BreadcrumbItem>
+          <BreadcrumbItem>
+            <router-link :to="nav?.from || '/records'">{{ nav?.from?.startsWith("/assessments") ? "考场" : "面试记录" }}</router-link>
+          </BreadcrumbItem>
           <BreadcrumbItem>面试报告</BreadcrumbItem>
         </Breadcrumb>
         <h1 class="page-title mt-1">
@@ -11,7 +13,13 @@
           <Tag v-if="detail?.review" color="blue" class="ml-2 align-middle">已复核</Tag>
         </h1>
       </div>
-      <div v-if="detail && ready" class="flex gap-2">
+      <div class="flex flex-wrap items-center gap-2">
+        <Space v-if="navIndex >= 0" :size="4" class="mr-2">
+          <Button :disabled="navIndex <= 0" @click="go(-1)"><LeftOutlined /> 上一份</Button>
+          <span class="muted num text-[13px] px-1">{{ navIndex + 1 }} / {{ nav!.ids.length }}</span>
+          <Button :disabled="navIndex >= nav!.ids.length - 1" @click="go(1)">下一份 <RightOutlined /></Button>
+        </Space>
+        <template v-if="detail && ready">
         <Popconfirm
           title="重新评分会让 AI 重新生成评分，已有的教师复核将被清除，确定继续？"
           ok-text="重新评分"
@@ -21,6 +29,7 @@
         </Popconfirm>
         <Button @click="reviewOpen = true"><EditOutlined /> 复核评分</Button>
         <Button type="primary" @click="exportPdf"><FilePdfOutlined /> 导出 PDF</Button>
+        </template>
       </div>
     </div>
 
@@ -43,10 +52,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
-import { useRoute } from "vue-router";
-import { Breadcrumb, BreadcrumbItem, Button, Popconfirm, Result, Spin, Tag, message } from "ant-design-vue";
-import { EditOutlined, FilePdfOutlined } from "@ant-design/icons-vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { Breadcrumb, BreadcrumbItem, Button, Popconfirm, Result, Space, Spin, Tag, message } from "ant-design-vue";
+import { EditOutlined, FilePdfOutlined, LeftOutlined, RightOutlined } from "@ant-design/icons-vue";
 import { getStudyDetail, reanalyzeApi } from "@/api/studyRecord";
 import ReportDocument from "./ReportDocument.vue";
 import ReviewDrawer from "./ReviewDrawer.vue";
@@ -54,7 +63,22 @@ import { printReport } from "./usePrintReport";
 import type { ReportDetail } from "./types";
 
 const route = useRoute();
-const recordId = Number(route.params.recordId);
+const router = useRouter();
+const recordId = computed(() => Number(route.params.recordId));
+
+// 从面试记录 / 考场进入时，可以按列表顺序翻看下一份报告
+const nav = ref<{ ids: number[]; from?: string } | null>(null);
+try {
+  nav.value = JSON.parse(sessionStorage.getItem("report-nav") || "null");
+} catch (e) {
+  nav.value = null;
+}
+const navIndex = computed(() => nav.value?.ids?.indexOf(recordId.value) ?? -1);
+
+function go(offset: number) {
+  const id = nav.value?.ids[navIndex.value + offset];
+  if (id) router.replace(`/records/${id}`);
+}
 const detail = ref<ReportDetail | null>(null);
 const loading = ref(true);
 const reviewOpen = ref(false);
@@ -65,7 +89,7 @@ const ready = computed(() => detail.value?.state === 1 && !!detail.value?.dimens
 
 async function load() {
   try {
-    const res: any = await getStudyDetail({ id: recordId });
+    const res: any = await getStudyDetail({ id: recordId.value });
     detail.value = res.data;
   } finally {
     loading.value = false;
@@ -78,7 +102,7 @@ async function load() {
 async function reanalyze() {
   reanalyzing.value = true;
   try {
-    await reanalyzeApi({ recordId });
+    await reanalyzeApi({ recordId: recordId.value });
     message.success("已提交重新评分");
     await load();
   } finally {
@@ -93,4 +117,12 @@ function exportPdf() {
 
 onMounted(load);
 onUnmounted(() => clearTimeout(timer));
+watch(recordId, (id) => {
+  if (!id) return;
+  loading.value = true;
+  detail.value = null;
+  reviewOpen.value = false;
+  window.scrollTo({ top: 0 });
+  load();
+});
 </script>

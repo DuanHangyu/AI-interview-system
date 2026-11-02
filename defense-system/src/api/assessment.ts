@@ -55,38 +55,3 @@ export function getAssessmentDetail(assessmentId: number) {
   });
 }
 
-// 设置考核预约
-export function settingAppointment(data: Record<string, any>) {
-  return request({
-    url: "/backend/assessment/settingAppointment",
-    method: "post",
-    data,
-  });
-}
-
-// 解除惩罚
-export function liftPunish(data: Record<string, any>) {
-  return request({
-    url: "/backend/assessment/lift-punish",
-    method: "post",
-    data,
-  });
-}
-
-// 获取考核预约设置汇总
-export function getSettingAppointment(id: number) {
-  return request({
-    url: "/backend/assessment/setting-appointment-summary",
-    method: "get",
-    params: { id },
-  });
-}
-
-// 取消学生预约
-export function cancelStudentAppointment(appointmentId: number) {
-  return request({
-    url: "/backend/assessment/cancel-student-appointment",
-    method: "post",
-    data: { appointmentId },
-  });
-}
