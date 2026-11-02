@@ -2,8 +2,7 @@
   <div class="room">
     <header class="room-header">
       <div class="room-brand">
-        <img :src="emblemRed" :alt="BRAND.school" class="room-mark" />
-        <span class="room-college">{{ BRAND.college }}</span>
+        <img :src="logoBlue" :alt="BRAND.school + BRAND.college" class="room-mark" />
         <span class="room-theme" :title="state?.theme">{{ state?.theme || "AI 面试" }}</span>
       </div>
       <div class="room-steps" v-if="state && stage !== 'done'">
@@ -243,7 +242,7 @@ import {
 } from "@/api/interview";
 import { SILENCE_PEAK, useAudioRecorder } from "@/composables/useAudioRecorder";
 import { BRAND } from "@/config/brand";
-import emblemRed from "@/assets/brand/emblem-red.svg";
+import logoBlue from "@/assets/brand/logo-marx-blue.png";
 
 type Stage = "loading" | "intro" | "defense" | "drawing" | "question" | "submitting" | "done";
 type QuestionPhase = "idle" | "playing" | "recording" | "uploading";
@@ -916,7 +915,6 @@ function onDeviceSelect(value: unknown) {
   background: var(--c-surface);
   border-top: 3px solid var(--c-primary);
   border-bottom: 1px solid var(--c-border);
-  box-shadow: var(--shadow-1);
 }
 
 .room-brand {
@@ -928,18 +926,10 @@ function onDeviceSelect(value: unknown) {
 
 .room-mark {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-}
-
-.room-college {
-  flex-shrink: 0;
-  padding-right: 12px;
+  height: 34px;
+  width: auto;
+  padding-right: 14px;
   border-right: 1px solid var(--c-border);
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--c-primary-deep);
-  letter-spacing: 1px;
 }
 
 .room-theme {
@@ -1358,8 +1348,8 @@ function onDeviceSelect(value: unknown) {
 }
 
 @media (max-width: 640px) {
-  .room-college {
-    display: none;
+  .room-mark {
+    height: 26px;
   }
 }
 </style>

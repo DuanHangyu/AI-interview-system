@@ -3,7 +3,7 @@
     <!-- 报告抬头 -->
     <header class="rp-head">
       <div class="rp-brand">
-        <img :src="logoRed" :alt="BRAND.school + BRAND.college" class="rp-logo" />
+        <img :src="logoBlue" :alt="BRAND.school + BRAND.college" class="rp-logo" />
         <span class="rp-product">{{ BRAND.product }}</span>
       </div>
       <div class="rp-meta">
@@ -165,7 +165,7 @@ import { computed } from "vue";
 import dayjs from "dayjs";
 import type { ReportDetail, ReportDimension } from "./types";
 import { BRAND } from "@/config/brand";
-import logoRed from "@/assets/brand/logo-marx-red.png";
+import logoBlue from "@/assets/brand/logo-marx-blue.png";
 
 const props = defineProps<{ detail: ReportDetail }>();
 
@@ -272,7 +272,6 @@ function barClass(dim: ReportDimension) {
 
 .rp-title {
   margin: 32px 0 4px;
-  color: var(--c-primary-deep);
   font-size: 26px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -512,7 +511,7 @@ function barClass(dim: ReportDimension) {
   margin: 0;
   padding: 16px 20px;
   border-left: 3px solid var(--c-primary);
-  background: #fdf6f4;
+  background: #f5f8fd;
   white-space: pre-line;
 }
 

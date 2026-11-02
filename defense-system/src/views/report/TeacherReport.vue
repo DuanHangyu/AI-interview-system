@@ -8,7 +8,7 @@
         </Breadcrumb>
         <h1 class="page-title mt-1">
           {{ detail?.studentName || "面试报告" }}
-          <Tag v-if="detail?.review" color="gold" class="ml-2 align-middle">已复核</Tag>
+          <Tag v-if="detail?.review" color="blue" class="ml-2 align-middle">已复核</Tag>
         </h1>
       </div>
       <div v-if="detail && ready" class="flex gap-2">

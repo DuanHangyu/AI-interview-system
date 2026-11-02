@@ -3,28 +3,24 @@
 @tailwind utilities;
 
 :root {
-  /* 大连理工大学马克思主义学院 · 学院红 */
-  --c-primary: #c3192a;
-  --c-primary-hover: #d43a47;
-  --c-primary-active: #9b0a18;
-  --c-primary-soft: #fbeceb;
-  --c-primary-deep: #8c0f1a;
-  --c-gold: #c9a063;
-  --c-gold-soft: #f8f0e3;
-  --c-text: #1f1d1b;
-  --c-text-2: #57534e;
-  --c-text-3: #8a847d;
-  --c-border: #e7e2dc;
-  --c-border-2: #f1ede8;
-  --c-bg: #f6f4f1;
+  /* 大连理工大学官网配色：大工蓝 + 白 */
+  --c-primary: #0041b7;
+  --c-primary-hover: #2a62c9;
+  --c-primary-active: #00318c;
+  --c-primary-soft: #eaf0fa;
+  --c-primary-deep: #00318c;
+  --c-text: #222222;
+  --c-text-2: #555555;
+  --c-text-3: #888888;
+  --c-border: #d9dee6;
+  --c-border-2: #e8ebf0;
+  --c-bg: #f2f4f7;
   --c-surface: #ffffff;
-  --c-success: #16a34a;
-  --c-warning: #d97706;
-  --c-danger: #dc2626;
-  --shadow-1: 0 1px 2px rgba(60, 30, 20, 0.04), 0 1px 3px rgba(60, 30, 20, 0.05);
-  --shadow-2: 0 4px 16px rgba(60, 30, 20, 0.08);
-  --header-h: 64px;
-  --sider-w: 224px;
+  --c-success: #1a8f3c;
+  --c-warning: #d48806;
+  --c-danger: #cf1322;
+  --header-h: 72px;
+  --nav-h: 48px;
 }
 
 html,
@@ -37,7 +33,7 @@ body {
   margin: 0;
   color: var(--c-text);
   background: var(--c-bg);
-  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Helvetica Neue",
+  font-family: "Microsoft YaHei", "PingFang SC", -apple-system, BlinkMacSystemFont, "Helvetica Neue",
     Arial, sans-serif;
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
@@ -46,7 +42,7 @@ body {
 /* 页面通用结构 */
 .page {
   padding: 24px;
-  max-width: 1360px;
+  max-width: 1240px;
   margin: 0 auto;
 }
 
@@ -55,34 +51,21 @@ body {
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--c-border);
 }
 
 .page-title {
-  position: relative;
   margin: 0;
-  padding-left: 14px;
   font-size: 20px;
   font-weight: 600;
   line-height: 28px;
   color: var(--c-text);
-  letter-spacing: 0.5px;
-}
-
-/* 标题左侧学院红竖条，呼应官网栏目标题 */
-.page-title::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 5px;
-  bottom: 5px;
-  width: 4px;
-  border-radius: 2px;
-  background: linear-gradient(180deg, var(--c-primary) 0%, var(--c-primary-deep) 100%);
 }
 
 .page-desc {
-  margin: 6px 0 0 14px;
+  margin: 4px 0 0;
   font-size: 13px;
   color: var(--c-text-3);
 }
@@ -90,8 +73,7 @@ body {
 .card {
   background: var(--c-surface);
   border: 1px solid var(--c-border-2);
-  border-radius: 10px;
-  box-shadow: var(--shadow-1);
+  border-radius: 2px;
 }
 
 .card-pad {
@@ -126,7 +108,8 @@ body {
     print-color-adjust: exact;
   }
   .shell-header,
-  .shell-sider,
+  .shell-nav,
+  .shell-footer,
   .no-print {
     display: none !important;
   }
@@ -145,15 +128,6 @@ body {
 
 .ant-table-wrapper .ant-table-thead > tr > th::before {
   display: none;
-}
-
-/* 列表中的危险操作（删除等）平时用中性色，悬停再变红，避免和学院红的普通链接混在一起 */
-.ant-btn-link.ant-btn-dangerous:not(:disabled) {
-  color: var(--c-text-3);
-}
-
-.ant-btn-link.ant-btn-dangerous:not(:disabled):hover {
-  color: var(--c-danger);
 }
 
 @media print {

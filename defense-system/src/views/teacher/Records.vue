@@ -1,9 +1,5 @@
 <template>
   <div class="page">
-    <WelcomeBanner :suffix="auth.role === 'TEACHER' ? '老师' : ''">
-      在这里查看学生面试结果，复核 AI 评分并导出成绩。
-    </WelcomeBanner>
-
     <div class="page-head">
       <div>
         <h1 class="page-title">面试记录</h1>
@@ -67,7 +63,7 @@
             <template v-else>
               <span class="num font-semibold" :class="passClass(record)">{{ finalScore(record) }}</span>
               <span v-if="record.totalScore != null" class="muted num"> / {{ record.totalScore }}</span>
-              <Tag v-if="record.reviewed" color="gold" :bordered="false" class="ml-2">已复核</Tag>
+              <Tag v-if="record.reviewed" color="blue" :bordered="false" class="ml-2">已复核</Tag>
             </template>
           </template>
           <template v-else-if="column.key === 'state'">
@@ -113,10 +109,7 @@ import { DownloadOutlined } from "@ant-design/icons-vue";
 import dayjs from "dayjs";
 import saveAs from "file-saver";
 import { exportStudentRecord, getStudyRecordList, reanalyzeApi, retakeApi } from "@/api/studyRecord";
-import WelcomeBanner from "@/components/WelcomeBanner.vue";
-import { useAuthStore } from "@/stores/auth";
 
-const auth = useAuthStore();
 
 const router = useRouter();
 const query = reactive({ studentName: "", theme: "" });

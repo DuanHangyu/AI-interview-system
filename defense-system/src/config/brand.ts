@@ -2,12 +2,12 @@
 export const BRAND = {
   school: "大连理工大学",
   college: "马克思主义学院",
-  product: "AI 智能面试系统",
-  fullName: "大连理工大学马克思主义学院 AI 智能面试系统",
-  motto: "团结 进取 求实 创新",
-  address: "大连市凌工路 2 号 · 大连理工大学马克思主义学院",
+  product: "智能面试系统",
+  fullName: "大连理工大学马克思主义学院智能面试系统",
+  address: "大连市凌工路2号",
   postcode: "116023",
+  phone: "0411-84708795",
   website: "https://marx.dlut.edu.cn/",
 };
 
-export const APP_TITLE = `${BRAND.college} · ${BRAND.product}`;
+export const APP_TITLE = `${BRAND.college}${BRAND.product}`;
