@@ -1,148 +1,92 @@
 <template>
   <article class="report">
-    <!-- 报告抬头 -->
-    <header class="rp-head">
-      <div class="rp-brand">
-        <img :src="logoBlue" :alt="BRAND.school + BRAND.college" class="rp-logo" />
-        <span class="rp-product">{{ BRAND.product }}</span>
-      </div>
-      <div class="rp-meta">
-        <span>报告编号 {{ reportNo }}</span>
-        <span v-if="detail.review?.reviewTime">复核时间 {{ detail.review.reviewTime }}</span>
-      </div>
-    </header>
-    <h1 class="rp-title">面试评估报告</h1>
-    <div class="rp-subtitle">{{ detail.theme }}</div>
+    <div class="rp-brand">
+      <img :src="logoBlue" :alt="BRAND.school + BRAND.college" />
+      <span>报告编号：{{ reportNo }}</span>
+    </div>
 
-    <!-- 候选人信息 -->
-    <section class="rp-info">
-      <div v-for="item in infoItems" :key="item.label" class="rp-info-item">
-        <span class="rp-info-label">{{ item.label }}</span>
-        <span class="rp-info-value">{{ item.value || "—" }}</span>
-      </div>
+    <h1 class="rp-title">
+      面试成绩分析报告
+      <span class="rp-score num">[ {{ detail.score ?? "—" }}/{{ detail.totalScore ?? 100 }} 分]</span>
+    </h1>
+
+    <!-- 基本信息 -->
+    <section class="rp-section">
+      <h2 class="rp-h2">[基本信息]</h2>
+      <p class="rp-info">
+        <span v-for="item in infoItems" :key="item.label">
+          <b>{{ item.label }}：</b>{{ item.value || "—" }}
+        </span>
+      </p>
     </section>
 
-    <!-- 综合结论 -->
-    <section class="rp-section rp-overview">
-      <div class="rp-score">
-        <div class="rp-score-label">综合得分</div>
-        <div class="rp-score-value num" :class="passed ? 'is-pass' : 'is-fail'">
-          {{ detail.score ?? "—" }}<small>/ {{ detail.totalScore ?? 100 }}</small>
-        </div>
-        <span class="rp-verdict" :class="passed ? 'is-pass' : 'is-fail'">{{ passed ? "通过" : "未通过" }}</span>
-        <div class="rp-score-foot">
-          及格线 {{ detail.passScore ?? "—" }}
-          <template v-if="reviewed"> · AI 初评 {{ detail.aiScore }}</template>
-        </div>
-      </div>
-      <div class="rp-summary">
-        <div class="rp-h3">综合评价</div>
-        <p>{{ detail.summary || "暂无综合评价" }}</p>
-        <div v-if="reviewed" class="rp-reviewed-note">
-          分数已由{{ detail.review?.reviewerName ? `教师 ${detail.review.reviewerName} ` : "教师" }}复核调整
-        </div>
-      </div>
+    <!-- 整体评价 -->
+    <section class="rp-section">
+      <h2 class="rp-h2">[整体评价]</h2>
+      <p class="rp-blue">{{ detail.summary || "暂无整体评价" }}</p>
+      <p class="rp-note">
+        结论：<b :class="passed ? 'is-pass' : 'is-fail'">{{ passed ? "通过" : "未通过" }}</b>（及格线
+        {{ detail.passScore ?? "—" }} 分）<template v-if="reviewed">
+          。AI 初评 {{ detail.aiScore }} 分，已由{{ detail.review?.reviewerName ? `${detail.review.reviewerName}老师` : "教师" }}复核调整。</template
+        >
+      </p>
+      <template v-if="strengths.length">
+        <div class="rp-label">[主要优点]</div>
+        <p v-for="(t, i) in strengths" :key="'s' + i" class="rp-blue">{{ i + 1 }}. {{ t }}</p>
+      </template>
+      <template v-if="weaknesses.length">
+        <div class="rp-label">[主要不足]</div>
+        <p v-for="(t, i) in weaknesses" :key="'w' + i" class="rp-blue">{{ i + 1 }}. {{ t }}</p>
+      </template>
     </section>
 
     <!-- 分项评分 -->
     <section v-if="dimensions.length" class="rp-section">
-      <h2 class="rp-h2">分项评分</h2>
-      <div class="rp-dims">
-        <div v-for="dim in dimensions" :key="dim.name" class="rp-dim">
-          <div class="rp-dim-head">
-            <span class="rp-dim-name">{{ dim.name }}</span>
-            <span class="rp-dim-score num">
-              <template v-if="dim.score !== dim.aiScore">
-                <s class="muted">{{ dim.aiScore }}</s>
-                <span class="rp-arrow">→</span>
-              </template>
-              <b>{{ dim.score }}</b>
-              <span class="muted"> / {{ dim.maxScore ?? "—" }}</span>
-            </span>
-          </div>
-          <div class="rp-bar">
-            <i :style="{ width: barWidth(dim) }" :class="barClass(dim)"></i>
-          </div>
-          <p v-if="dim.description" class="rp-dim-desc">{{ dim.description }}</p>
+      <h2 class="rp-h2">[分项评分]</h2>
+      <div v-for="dim in dimensions" :key="dim.name" class="rp-item">
+        <div class="rp-label">
+          [{{ dim.name }}]
+          <span class="num">{{ dim.score }}/{{ dim.maxScore ?? "—" }} 分</span>
+          <span v-if="dim.score !== dim.aiScore" class="rp-ai num">（AI 初评 {{ dim.aiScore }} 分）</span>
         </div>
+        <p v-if="dim.description" class="rp-blue">{{ dim.description }}</p>
       </div>
     </section>
 
-    <!-- 亮点 / 不足 / 建议 -->
-    <section v-if="hasAnalysis" class="rp-section">
-      <h2 class="rp-h2">表现分析</h2>
-      <div class="rp-analysis">
-        <div v-if="strengths.length" class="rp-block">
-          <div class="rp-h3 is-good">表现亮点</div>
-          <ul>
-            <li v-for="(t, i) in strengths" :key="i">{{ t }}</li>
-          </ul>
-        </div>
-        <div v-if="weaknesses.length" class="rp-block">
-          <div class="rp-h3 is-bad">待提升项</div>
-          <ul>
-            <li v-for="(t, i) in weaknesses" :key="i">{{ t }}</li>
-          </ul>
-        </div>
-        <div v-if="suggestions.length" class="rp-block">
-          <div class="rp-h3">改进建议</div>
-          <ol>
-            <li v-for="(t, i) in suggestions" :key="i">{{ t }}</li>
-          </ol>
-        </div>
-      </div>
-    </section>
-
-    <!-- 教师复核意见 -->
-    <section v-if="detail.review?.comment" class="rp-section">
-      <h2 class="rp-h2">教师评语</h2>
-      <blockquote class="rp-comment">
-        {{ detail.review.comment }}
-        <footer>—— {{ detail.review.reviewerName || "教师" }}，{{ detail.review.reviewTime }}</footer>
-      </blockquote>
-    </section>
-
-    <!-- 答辩记录 -->
+    <!-- 项目答辩 -->
     <section v-if="detail.defense" class="rp-section">
-      <h2 class="rp-h2">项目答辩记录</h2>
-      <div class="rp-qa">
-        <div class="rp-qa-row">
-          <span class="rp-qa-tag is-a">陈述</span>
-          <p>{{ detail.defense.defenseAnswer || "（无内容）" }}</p>
-        </div>
-        <audio
-          v-if="detail.defense.defenseAnswerFile"
-          :src="detail.defense.defenseAnswerFile"
-          controls
-          preload="none"
-          class="rp-audio no-print"
-        ></audio>
-      </div>
+      <h2 class="rp-h2">[项目答辩]</h2>
+      <div class="rp-label">[陈述原话]</div>
+      <p class="rp-quote">{{ detail.defense.defenseAnswer || "（无内容）" }}</p>
+      <audio
+        v-if="detail.defense.defenseAnswerFile"
+        :src="detail.defense.defenseAnswerFile"
+        controls
+        preload="none"
+        class="rp-audio no-print"
+      ></audio>
+      <template v-if="hasComment(detail.defense)">
+        <div class="rp-label">[陈述评价]</div>
+        <p v-if="detail.defense.strength" class="rp-blue"><b>优点</b>{{ detail.defense.strength }}</p>
+        <p v-if="detail.defense.weakness" class="rp-blue"><b>缺点</b>{{ detail.defense.weakness }}</p>
+        <p v-if="detail.defense.suggestion" class="rp-blue"><b>如何改进</b>{{ detail.defense.suggestion }}</p>
+      </template>
     </section>
 
-    <!-- 问答记录 -->
+    <!-- 面试问答 -->
     <section v-if="qa.length" class="rp-section">
-      <h2 class="rp-h2">问答记录</h2>
-      <div v-for="(item, i) in qa" :key="item.id" class="rp-qa">
-        <div class="rp-qa-index">第 {{ i + 1 }} 题</div>
-        <div class="rp-qa-row">
-          <span class="rp-qa-tag">问</span>
-          <p class="rp-q">{{ plain(item.question) }}</p>
-        </div>
-        <div class="rp-qa-row">
-          <span class="rp-qa-tag is-a">答</span>
-          <p>{{ item.answer || "（未作答）" }}</p>
-        </div>
+      <h2 class="rp-h2">[面试问答]</h2>
+      <div v-for="(item, i) in qa" :key="item.id" class="rp-item">
+        <div class="rp-label">[问题内容 · 第 {{ i + 1 }} 题]</div>
+        <p>{{ plain(item.question) }}</p>
+        <div class="rp-label">[回答内容]</div>
+        <p class="rp-answer">{{ item.answer || "（未作答）" }}</p>
         <audio v-if="item.answerFile" :src="item.answerFile" controls preload="none" class="rp-audio no-print"></audio>
         <template v-if="item.followQuestion">
-          <div class="rp-qa-row is-follow">
-            <span class="rp-qa-tag">追问</span>
-            <p class="rp-q">{{ plain(item.followQuestion) }}</p>
-          </div>
-          <div class="rp-qa-row is-follow">
-            <span class="rp-qa-tag is-a">答</span>
-            <p>{{ item.followAnswer || "（未作答）" }}</p>
-          </div>
+          <div class="rp-label">[追问内容]</div>
+          <p>{{ plain(item.followQuestion) }}</p>
+          <div class="rp-label">[追问回答]</div>
+          <p class="rp-answer">{{ item.followAnswer || "（未作答）" }}</p>
           <audio
             v-if="item.followAnswerFile"
             :src="item.followAnswerFile"
@@ -151,11 +95,37 @@
             class="rp-audio no-print"
           ></audio>
         </template>
+        <template v-if="item.strength">
+          <div class="rp-label">[优势]</div>
+          <p>{{ item.strength }}</p>
+        </template>
+        <template v-if="item.weakness">
+          <div class="rp-label">[劣势]</div>
+          <p>{{ item.weakness }}</p>
+        </template>
+        <template v-if="item.suggestion">
+          <div class="rp-label">[建议]</div>
+          <p>{{ item.suggestion }}</p>
+        </template>
       </div>
     </section>
 
+    <!-- 教师评语 -->
+    <section v-if="detail.review?.comment" class="rp-section">
+      <h2 class="rp-h2">[教师评语]</h2>
+      <p class="rp-blue">{{ detail.review.comment }}</p>
+      <p class="rp-note">—— {{ detail.review.reviewerName || "教师" }}，{{ detail.review.reviewTime }}</p>
+    </section>
+
+    <!-- 改进建议 -->
+    <section v-if="suggestions.length" class="rp-section">
+      <h2 class="rp-h2">[改进建议]</h2>
+      <p v-for="(t, i) in suggestions" :key="i" class="rp-blue">{{ i + 1 }}. {{ t }}</p>
+    </section>
+
     <footer class="rp-foot">
-      本报告由 AI 根据面试录音的转写内容和考核标准生成{{ reviewed ? "，分数已经教师复核" : "" }}，仅供教学评估参考。
+      <p><b>报告由{{ BRAND.school }}{{ BRAND.college }}{{ BRAND.product }}生成</b></p>
+      <p><b>时间：</b>{{ reportTime }}</p>
     </footer>
   </article>
 </template>
@@ -163,7 +133,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import dayjs from "dayjs";
-import type { ReportDetail, ReportDimension } from "./types";
+import type { ReportDetail } from "./types";
 import { BRAND } from "@/config/brand";
 import logoBlue from "@/assets/brand/logo-marx-blue.png";
 
@@ -178,8 +148,11 @@ const dimensions = computed(() => props.detail.dimensions || []);
 const strengths = computed(() => clean(props.detail.analysis?.strengths));
 const weaknesses = computed(() => clean(props.detail.analysis?.weaknesses));
 const suggestions = computed(() => clean(props.detail.analysis?.suggestions));
-const hasAnalysis = computed(() => strengths.value.length + weaknesses.value.length + suggestions.value.length > 0);
 const qa = computed(() => props.detail.result || []);
+const reportTime = computed(() => {
+  const t = props.detail.review?.reviewTime || props.detail.interviewTime;
+  return t ? dayjs(t).format("YYYY-MM-DD HH:mm:ss") : "—";
+});
 
 const infoItems = computed(() => {
   const d = props.detail;
@@ -188,9 +161,9 @@ const infoItems = computed(() => {
     { label: "姓名", value: d.studentName },
     { label: "学号", value: d.studentAccount },
     { label: "班级", value: d.schoolClass },
+    { label: "面试名称", value: d.theme },
     { label: "面试时间", value: d.interviewTime ? dayjs(d.interviewTime).format("YYYY-MM-DD HH:mm") : "" },
     { label: "面试环节", value: parts.join(" + ") },
-    { label: "问答题数", value: d.questionEnabled ? `${qa.value.length} 题` : "" },
   ];
 });
 
@@ -202,432 +175,200 @@ function plain(text?: string | null) {
   return (text || "").replace(/[*#`>_]/g, "");
 }
 
-function barWidth(dim: ReportDimension) {
-  const max = dim.maxScore || props.detail.totalScore || 100;
-  return `${Math.max(0, Math.min(100, (dim.score / max) * 100))}%`;
-}
-
-function barClass(dim: ReportDimension) {
-  if (!dim.maxScore) return "";
-  const ratio = dim.score / dim.maxScore;
-  return ratio >= 0.8 ? "is-high" : ratio < 0.6 ? "is-low" : "";
+function hasComment(c: { strength?: string | null; weakness?: string | null; suggestion?: string | null }) {
+  return !!(c.strength || c.weakness || c.suggestion);
 }
 </script>
 
 <style scoped>
+/* 版式按学院提供的《面试成绩分析报告》样张：宋体正文，灰底方括号标题，评价蓝字，学生原话下划线 */
 .report {
-  --rp-text: #1f2329;
-  --rp-text-2: #4e5969;
-  --rp-line: #e5e6eb;
+  --rp-blue: #3341c9;
+  --rp-red: #e0252d;
+  --rp-gray-bg: #d9d9d9;
   width: 100%;
-  max-width: 880px;
+  max-width: 820px;
   margin: 0 auto;
-  padding: 48px 56px;
+  padding: 36px 52px 48px;
   background: #fff;
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  color: var(--rp-text);
-  font-size: 14px;
-  line-height: 1.75;
-}
-
-.rp-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 12px;
-  border-bottom: 2px solid var(--c-primary);
-  font-size: 12px;
-  color: var(--rp-text-2);
+  border-left: 1px solid #8c8c8c;
+  border-right: 1px solid #8c8c8c;
+  color: #333;
+  font-family: "Times New Roman", "SimSun", "宋体", "Songti SC", "STSong", serif;
+  font-size: 15px;
+  line-height: 1.8;
 }
 
 .rp-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--rp-text);
+  justify-content: space-between;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #d9d9d9;
+  font-size: 12px;
+  color: #888;
 }
 
-.rp-logo {
+.rp-brand img {
   display: block;
   height: 30px;
   width: auto;
 }
 
-.rp-product {
-  padding-left: 12px;
-  border-left: 1px solid var(--rp-line);
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--rp-text-2);
-  letter-spacing: 1px;
-}
-
-.rp-meta {
-  display: flex;
-  gap: 16px;
-}
-
 .rp-title {
-  margin: 32px 0 4px;
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-align: center;
-}
-
-.rp-subtitle {
-  text-align: center;
-  color: var(--rp-text-2);
-}
-
-.rp-info {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  margin-top: 28px;
-  border: 1px solid var(--rp-line);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.rp-info-item {
-  display: flex;
-  border-bottom: 1px solid var(--rp-line);
-}
-
-.rp-info-item:nth-last-child(-n + 3) {
-  border-bottom: 0;
-}
-
-.rp-info-label {
-  flex-shrink: 0;
-  width: 76px;
-  padding: 8px 12px;
-  background: #f7f8fa;
-  color: var(--rp-text-2);
-  font-size: 13px;
-}
-
-.rp-info-value {
-  padding: 8px 12px;
-  font-size: 13px;
-  word-break: break-all;
-}
-
-.rp-section {
-  margin-top: 32px;
-  break-inside: avoid-page;
-}
-
-.rp-h2 {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 16px;
-  font-size: 17px;
-  font-weight: 600;
-}
-
-.rp-h2::before {
-  content: "";
-  width: 4px;
-  height: 16px;
-  border-radius: 2px;
-  background: var(--c-primary);
-}
-
-.rp-h3 {
-  margin-bottom: 6px;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.rp-h3.is-good {
-  color: #00a32a;
-}
-
-.rp-h3.is-bad {
-  color: #e8590c;
-}
-
-.rp-overview {
-  display: flex;
-  gap: 32px;
-  padding: 24px;
-  border: 1px solid var(--rp-line);
-  border-radius: 6px;
-  background: #fafbfc;
+  margin: 28px 0 8px;
+  font-family: "SimHei", "黑体", "Microsoft YaHei", sans-serif;
+  font-size: 30px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: #000;
 }
 
 .rp-score {
-  flex-shrink: 0;
-  width: 168px;
-  text-align: center;
-  border-right: 1px solid var(--rp-line);
-  padding-right: 24px;
-}
-
-.rp-score-label {
-  font-size: 13px;
-  color: var(--rp-text-2);
-}
-
-.rp-score-value {
-  margin: 4px 0 8px;
-  font-size: 48px;
-  font-weight: 700;
-  line-height: 1.1;
-}
-
-.rp-score-value small {
-  margin-left: 4px;
-  font-size: 16px;
-  font-weight: 400;
-  color: var(--rp-text-2);
-}
-
-.rp-score-value.is-pass {
-  color: var(--c-primary);
-}
-
-.rp-score-value.is-fail {
-  color: #f53f3f;
-}
-
-.rp-verdict {
   display: inline-block;
-  padding: 0 12px;
-  border-radius: 4px;
-  font-size: 13px;
-  line-height: 24px;
-  font-weight: 500;
-}
-
-.rp-verdict.is-pass {
-  background: #e8ffea;
-  color: #00a32a;
-}
-
-.rp-verdict.is-fail {
-  background: #ffece8;
-  color: #f53f3f;
-}
-
-.rp-score-foot {
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--rp-text-2);
-}
-
-.rp-summary p {
-  margin: 0;
-  color: var(--rp-text);
-}
-
-.rp-reviewed-note {
-  margin-top: 10px;
-  font-size: 12px;
-  color: var(--c-primary);
-}
-
-.rp-dims {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-.rp-dim {
-  break-inside: avoid;
-}
-
-.rp-dim-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-}
-
-.rp-dim-name {
-  font-weight: 600;
-}
-
-.rp-dim-score b {
-  font-size: 16px;
-}
-
-.rp-arrow {
-  margin: 0 4px;
-  color: var(--rp-text-2);
-}
-
-.rp-bar {
-  height: 8px;
-  margin: 6px 0;
-  overflow: hidden;
-  border-radius: 4px;
-  background: #f0f1f2;
-}
-
-.rp-bar i {
-  display: block;
-  height: 100%;
-  border-radius: 4px;
-  background: var(--c-primary);
-}
-
-.rp-bar i.is-high {
-  background: #00b42a;
-}
-
-.rp-bar i.is-low {
-  background: #ff7d00;
-}
-
-.rp-dim-desc {
-  margin: 0;
-  color: var(--rp-text-2);
-  font-size: 13px;
-}
-
-.rp-analysis {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.rp-block ul,
-.rp-block ol {
-  margin: 0;
-  padding-left: 20px;
-  color: var(--rp-text);
-}
-
-.rp-block li + li {
-  margin-top: 4px;
-}
-
-.rp-comment {
-  margin: 0;
-  padding: 16px 20px;
-  border-left: 3px solid var(--c-primary);
-  background: #f5f8fd;
-  white-space: pre-line;
-}
-
-.rp-comment footer {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--rp-text-2);
-  text-align: right;
-}
-
-.rp-qa {
-  padding: 16px 0;
-  border-bottom: 1px dashed var(--rp-line);
-  break-inside: avoid;
-}
-
-.rp-qa:first-of-type {
-  padding-top: 0;
-}
-
-.rp-qa-index {
-  margin-bottom: 8px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--rp-text-2);
-}
-
-.rp-qa-row {
-  display: flex;
-  gap: 12px;
-}
-
-.rp-qa-row + .rp-qa-row {
-  margin-top: 6px;
-}
-
-.rp-qa-row.is-follow {
-  margin-left: 24px;
-}
-
-.rp-qa-row p {
-  margin: 0;
-  flex: 1;
-  white-space: pre-line;
-}
-
-.rp-q {
-  font-weight: 500;
-}
-
-.rp-qa-tag {
-  flex-shrink: 0;
-  min-width: 32px;
-  height: 22px;
+  margin-left: 8px;
   padding: 0 6px;
-  margin-top: 2px;
-  border-radius: 4px;
-  background: #f2f3f5;
-  color: var(--rp-text-2);
-  font-size: 12px;
-  line-height: 22px;
-  text-align: center;
+  background: #f5b8c3;
+  color: var(--rp-red);
+  font-weight: 700;
 }
 
-.rp-qa-tag.is-a {
-  background: var(--c-primary-soft);
-  color: var(--c-primary);
+.rp-section {
+  margin-top: 30px;
+}
+
+/* display: table 让灰底只包住文字，同时独占一行 */
+.rp-h2 {
+  display: table;
+  margin: 0 0 12px;
+  padding: 0 4px;
+  background: var(--rp-gray-bg);
+  font-family: "SimHei", "黑体", "Microsoft YaHei", sans-serif;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: #000;
+  break-after: avoid-page;
+}
+
+.rp-label {
+  display: table;
+  margin: 10px 0 4px;
+  padding: 0 3px;
+  background: var(--rp-gray-bg);
+  font-family: "Times New Roman", "SimHei", "黑体", "Microsoft YaHei", sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  break-after: avoid-page;
+  line-height: 1.6;
+  color: #000;
+}
+
+.rp-label + p,
+.rp-label + .rp-quote,
+.rp-label + .rp-answer {
+  margin-top: 0;
+}
+
+.report p {
+  margin: 0 0 4px;
+  text-align: justify;
+  white-space: pre-line;
+}
+
+.rp-blue {
+  color: var(--rp-blue);
+}
+
+.rp-blue b,
+.rp-info b,
+.rp-note b {
+  margin-right: 4px;
+  font-family: "Times New Roman", "SimHei", "黑体", "Microsoft YaHei", sans-serif;
+}
+
+.rp-quote {
+  color: #000;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.rp-answer {
+  color: var(--rp-red);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.rp-info {
+  display: flex;
+  flex-wrap: wrap;
+  column-gap: 28px;
+}
+
+.rp-info b {
+  color: #000;
+}
+
+.rp-note {
+  color: #666;
+  font-size: 14px;
+}
+
+.rp-note .is-pass {
+  color: #1a8f3c;
+}
+
+.rp-note .is-fail {
+  color: var(--rp-red);
+}
+
+.rp-ai {
+  font-weight: 400;
+  color: #666;
+}
+
+.rp-item {
+  margin-bottom: 18px;
+}
+
+.rp-item + .rp-item {
+  padding-top: 6px;
 }
 
 .rp-audio {
   display: block;
   width: 100%;
   max-width: 420px;
-  height: 32px;
-  margin: 8px 0 0 44px;
+  height: 36px;
+  margin: 6px 0 4px;
 }
 
 .rp-foot {
   margin-top: 40px;
-  padding-top: 12px;
-  border-top: 1px solid var(--rp-line);
-  font-size: 12px;
-  color: var(--rp-text-2);
-  text-align: center;
+  color: #000;
+  font-family: "Times New Roman", "SimHei", "黑体", "Microsoft YaHei", sans-serif;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 640px) {
   .report {
-    padding: 24px 16px;
+    padding: 24px 16px 32px;
   }
-  .rp-info {
-    grid-template-columns: 1fr;
+  .rp-title {
+    font-size: 24px;
   }
-  .rp-overview {
-    flex-direction: column;
-  }
-  .rp-score {
-    width: auto;
-    border-right: 0;
-    padding-right: 0;
+  .rp-h2 {
+    font-size: 20px;
   }
 }
 
 @media print {
   .report {
     max-width: none;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    font-size: 12px;
+    padding: 0 8mm;
+    font-size: 13px;
   }
   .rp-title {
-    margin-top: 20px;
-  }
-  .rp-section {
-    margin-top: 24px;
+    margin-top: 16px;
   }
 }
 </style>

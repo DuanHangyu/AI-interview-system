@@ -14,6 +14,9 @@ export interface ReportQa {
   followQuestion?: string | null;
   followAnswer?: string | null;
   followAnswerFile?: string | null;
+  strength?: string | null;
+  weakness?: string | null;
+  suggestion?: string | null;
 }
 
 export interface ReportDetail {
@@ -32,7 +35,13 @@ export interface ReportDetail {
   summary?: string | null;
   dimensions?: ReportDimension[] | null;
   analysis?: { suggestions?: string[]; strengths?: string[]; weaknesses?: string[] } | null;
-  defense?: { defenseAnswer?: string; defenseAnswerFile?: string | null } | null;
+  defense?: {
+    defenseAnswer?: string;
+    defenseAnswerFile?: string | null;
+    strength?: string | null;
+    weakness?: string | null;
+    suggestion?: string | null;
+  } | null;
   result?: ReportQa[] | null;
   review?: {
     comment?: string | null;

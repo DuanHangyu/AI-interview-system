@@ -31,23 +31,24 @@ public class AiManager {
                   "type": "array",
                   "items": {
                     "type": "object",
-                    "required": ["id", "question", "answer", "followQuestion", "followAnswer"],
+                    "required": ["id", "strength", "weakness", "suggestion"],
                     "additionalProperties": false,
                     "properties": {
                       "id": {"type": "integer", "description": "问题Id"},
-                      "question": {"type": "string", "description": "问题"},
-                      "answer": {"type": "string", "description": "回答"},
-                      "followQuestion": {"type": "string", "description": "追问问题"},
-                      "followAnswer": {"type": "string", "description": "追加问题回答"}
+                      "strength": {"type": "string", "description": "本题回答的优势"},
+                      "weakness": {"type": "string", "description": "本题回答的不足"},
+                      "suggestion": {"type": "string", "description": "本题的改进建议"}
                     }
                   }
                 },
                 "defense": {
                   "type": "object",
-                  "required": ["defenseAnswer"],
+                  "required": ["strength", "weakness", "suggestion"],
                   "additionalProperties": false,
                   "properties": {
-                    "defenseAnswer": {"type": "string", "description": "答辩内容"}
+                    "strength": {"type": "string", "description": "答辩陈述的优点"},
+                    "weakness": {"type": "string", "description": "答辩陈述的不足"},
+                    "suggestion": {"type": "string", "description": "答辩陈述的改进建议"}
                   }
                 },
                 "analysis": {
@@ -86,10 +87,12 @@ public class AiManager {
               "properties": {
                 "defense": {
                   "type": "object",
-                  "required": ["defenseAnswer"],
+                  "required": ["strength", "weakness", "suggestion"],
                   "additionalProperties": false,
                   "properties": {
-                    "defenseAnswer": {"type": "string", "description": "答辩内容"}
+                    "strength": {"type": "string", "description": "答辩陈述的优点"},
+                    "weakness": {"type": "string", "description": "答辩陈述的不足"},
+                    "suggestion": {"type": "string", "description": "答辩陈述的改进建议"}
                   }
                 },
                 "analysis": {
@@ -130,14 +133,13 @@ public class AiManager {
                   "type": "array",
                   "items": {
                     "type": "object",
-                    "required": ["id", "question", "answer", "followQuestion", "followAnswer"],
+                    "required": ["id", "strength", "weakness", "suggestion"],
                     "additionalProperties": false,
                     "properties": {
                       "id": {"type": "integer", "description": "问题Id"},
-                      "question": {"type": "string", "description": "问题"},
-                      "answer": {"type": "string", "description": "回答"},
-                      "followQuestion": {"type": "string", "description": "追问问题"},
-                      "followAnswer": {"type": "string", "description": "追加问题回答"}
+                      "strength": {"type": "string", "description": "本题回答的优势"},
+                      "weakness": {"type": "string", "description": "本题回答的不足"},
+                      "suggestion": {"type": "string", "description": "本题的改进建议"}
                     }
                   }
                 },

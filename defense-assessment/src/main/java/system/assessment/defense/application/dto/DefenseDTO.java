@@ -16,4 +16,13 @@ public class DefenseDTO {
 
     @Schema(description = "答辩语音")
     private String defenseAnswerFile;
+
+    @Schema(description = "答辩陈述的优点")
+    private String strength;
+
+    @Schema(description = "答辩陈述的不足")
+    private String weakness;
+
+    @Schema(description = "答辩陈述的改进建议")
+    private String suggestion;
 }

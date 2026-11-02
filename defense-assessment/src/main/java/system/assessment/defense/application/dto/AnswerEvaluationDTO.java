@@ -37,4 +37,13 @@ public class AnswerEvaluationDTO {
 
     @Schema(description = "追问问题回答文件")
     private String followAnswerFile;
+
+    @Schema(description = "本题回答的优势")
+    private String strength;
+
+    @Schema(description = "本题回答的不足")
+    private String weakness;
+
+    @Schema(description = "本题的改进建议")
+    private String suggestion;
 }

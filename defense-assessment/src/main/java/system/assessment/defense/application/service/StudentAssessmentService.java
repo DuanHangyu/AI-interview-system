@@ -569,22 +569,30 @@ public class StudentAssessmentService {
                         .map(fileStorage::signedUrl)
                         .orElse(null));
             }
-            List<AnswerEvaluationDTO> result = evaluation.getResult();
-            if (CollectionUtils.isNotEmpty(result)) {
-                for (AnswerEvaluationDTO answerEvaluationDTO : result) {
-                    StudentAssessmentQuestionAnswerPO matchAnswer = quesitonAnswerIdMap.get(answerEvaluationDTO.getId());
-                    if (matchAnswer == null) {
-                        continue;
-                    }
-                    answerEvaluationDTO.setQuestion(matchAnswer.getQuestion());
-                    answerEvaluationDTO.setAnswer(matchAnswer.getAnswer());
-                    answerEvaluationDTO.setAnswerFile(fileStorage.signedUrl(matchAnswer.getAnswerVoice()));
-                    answerEvaluationDTO.setFollowQuestion(matchAnswer.getFollowQuestion());
-                    answerEvaluationDTO.setFollowAnswer(matchAnswer.getFollowAnswer());
-                    Optional.ofNullable(matchAnswer.getFollowAnswerVoice())
-                            .ifPresent(item -> answerEvaluationDTO.setFollowAnswerFile(fileStorage.signedUrl(item)));
-                }
-            }
+            // 问答列表以数据库为准（按抽题顺序），AI 的逐题点评按问题 id 合并进来；模型漏掉的题也照常展示
+            Map<Integer, AnswerEvaluationDTO> commentById = Optional.ofNullable(evaluation.getResult()).orElse(List.of())
+                    .stream().filter(item -> item.getId() != null)
+                    .collect(Collectors.toMap(AnswerEvaluationDTO::getId, item -> item, (a, b) -> a));
+            List<AnswerEvaluationDTO> result = quesitonAnswerIdMap.values().stream()
+                    .sorted(Comparator.comparing(StudentAssessmentQuestionAnswerPO::getSortIndex,
+                            Comparator.nullsLast(Comparator.naturalOrder())))
+                    .map(answer -> {
+                        AnswerEvaluationDTO comment = commentById.get(answer.getId());
+                        return AnswerEvaluationDTO.builder()
+                                .id(answer.getId())
+                                .question(answer.getQuestion())
+                                .answer(answer.getAnswer())
+                                .answerFile(fileStorage.signedUrl(answer.getAnswerVoice()))
+                                .followQuestion(answer.getFollowQuestion())
+                                .followAnswer(answer.getFollowAnswer())
+                                .followAnswerFile(Optional.ofNullable(answer.getFollowAnswerVoice())
+                                        .map(fileStorage::signedUrl).orElse(null))
+                                .strength(comment == null ? null : comment.getStrength())
+                                .weakness(comment == null ? null : comment.getWeakness())
+                                .suggestion(comment == null ? null : comment.getSuggestion())
+                                .build();
+                    })
+                    .toList();
             return StudentAssessmentDetailDTO.builder()
                     .id(record.getId())
                     .studentName(student.getName())
