@@ -167,15 +167,13 @@
                   <span v-else class="muted">未设置</span>
                 </template>
                 <template v-else-if="column.key === 'content'">
-                  <div class="q-content">{{ record.content }}</div>
+                  <div class="q-content q-clamp" :title="record.content">{{ record.content }}</div>
                   <div v-if="record.rubric" class="q-sub">
                     评分标准：{{ rubricSummary(record.rubric) }}
                   </div>
                   <div v-else-if="record.referenceAnswer" class="q-sub">参考答案：{{ record.referenceAnswer }}</div>
                   <div v-if="record.followUps.length" class="q-sub">
-                    追问 {{ record.followUps.length }} 个<template v-if="!form.followUp">（未启用追问）</template>：{{
-                      record.followUps.map((f) => f.content).join(" / ")
-                    }}
+                    追问 {{ record.followUps.length }} 个<template v-if="!form.followUp">（未启用追问）</template>，点击“编辑”查看
                   </div>
                 </template>
                 <template v-else-if="column.key === 'audio'">
@@ -1212,6 +1210,13 @@ onMounted(load);
   padding: 12px;
   border: 1px solid var(--c-border);
   background: #fafbfc;
+}
+
+.q-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .q-sub {

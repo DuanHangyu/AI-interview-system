@@ -193,15 +193,16 @@ public class AiManager {
                         "type": "array",
                         "items": {
                           "type": "object",
-                          "required": ["name", "level", "score", "hitPoints", "missedPoints", "comment"],
+                          "required": ["name", "check", "hitPoints", "missedPoints", "comment", "level", "score"],
                           "additionalProperties": false,
                           "properties": {
                             "name": {"type": "string", "description": "评分维度名称，与本题评分标准一致"},
-                            "level": {"type": "string", "description": "所在分档的分数段，如 4-5分"},
-                            "score": {"type": "integer", "description": "该维度得分"},
+                            "check": {"type": "string", "description": "逐条对照最高分档的各条表现，写明每条是否达到及学生原话依据"},
                             "hitPoints": {"type": "array", "items": {"type": "string"}},
                             "missedPoints": {"type": "array", "items": {"type": "string"}},
-                            "comment": {"type": "string", "description": "给分依据"}
+                            "comment": {"type": "string", "description": "给分依据"},
+                            "level": {"type": "string", "description": "所在分档的分数段，如 4-5分"},
+                            "score": {"type": "integer", "description": "该维度得分"}
                           }
                         }
                       },
