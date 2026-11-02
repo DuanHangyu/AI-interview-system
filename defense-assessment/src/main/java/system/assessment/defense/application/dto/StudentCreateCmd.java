@@ -3,6 +3,7 @@ package system.assessment.defense.application.dto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotEmpty;
 import lombok.Data;
+import system.assessment.defense.infrastructure.common.PasswordCodec;
 import system.assessment.defense.infrastructure.repository.dao.po.UserPO;
 
 /**
@@ -33,7 +34,7 @@ public class StudentCreateCmd {
         return UserPO.builder()
                 .name(name)
                 .account(account)
-                .password(password)
+                .password(PasswordCodec.hash(password))
                 .type(0)
                 .schoolClass(schoolClass)
                 .build();

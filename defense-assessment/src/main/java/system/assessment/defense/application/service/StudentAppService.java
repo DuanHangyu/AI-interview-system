@@ -14,10 +14,10 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import system.assessment.defense.application.dto.*;
-import system.assessment.defense.domain.entity.TeacherSummary;
 import system.assessment.defense.domain.event.StudentCreateEvent;
 import system.assessment.defense.infrastructure.emuns.ErrorCodeEnums;
 import system.assessment.defense.infrastructure.emuns.UserRoleEnums;
+import system.assessment.defense.infrastructure.common.PasswordCodec;
 import system.assessment.defense.infrastructure.exception.BusinessException;
 import system.assessment.defense.infrastructure.repository.dao.po.*;
 import system.assessment.defense.infrastructure.repository.dao.service.*;
@@ -50,15 +50,10 @@ public class StudentAppService {
     private final ApplicationEventPublisher publisher;
 
     public IPage<StudentDTO> pageList(StudentPageQuery query) {
-        int teacherId = StpUtil.getLoginIdAsInt();
-        TeacherSummary teacherSummary = userService.findTeacherSummaryById(teacherId).orElseThrow(() -> new BusinessException(ErrorCodeEnums.USER_NOT_FOUND));
-        List<Integer> studentIds = teacherSummary.getStudentIds();
-        if (CollectionUtils.isEmpty(studentIds)) {
-            return new Page<>();
-        }
+        // 学生名册由全体教师共用（与创建面试时的选人范围一致），否则新建 / 导入的学生在加入面试前会"消失"
         IPage<UserPO> page = userService.page(new Page<>(query.getPage(), query.getSize()),
                 Wrappers.lambdaQuery(UserPO.class)
-                        .in(UserPO::getId, studentIds)
+                        .eq(UserPO::getType, UserRoleEnums.STUDENT.getRole())
                         .like(StringUtils.isNotBlank(query.getName()), UserPO::getName, query.getName())
                         .like(StringUtils.isNotBlank(query.getPhone()), UserPO::getPhone, query.getPhone())
                         .like(StringUtils.isNotBlank(query.getAccount()), UserPO::getAccount, query.getAccount())
@@ -68,6 +63,9 @@ public class StudentAppService {
 
     @Transactional(rollbackFor = Exception.class)
     public Boolean createStudent(StudentCreateCmd createCmd) {
+        if (StringUtils.isBlank(createCmd.getPassword())) {
+            throw new BusinessException(ErrorCodeEnums.IMPORT_STUDENT_PASSWORD_EMPTY);
+        }
         UserPO userPO = createCmd.toPO();
         boolean save = userService.save(userPO);
         saveRelation(userPO);
@@ -99,11 +97,20 @@ public class StudentAppService {
     }
 
     public Boolean modifyStudent(StudentModifyCmd modifyCmd) {
+        requireStudent(modifyCmd.getId());
         return userService.updateById(modifyCmd.toPO());
+    }
+
+    /** 学生管理接口只能操作学生账号，防止借此修改 / 删除教师和管理员 */
+    private void requireStudent(Integer id) {
+        userService.findById(id)
+                .filter(user -> Objects.equals(user.getType(), UserRoleEnums.STUDENT.getRole()))
+                .orElseThrow(() -> new BusinessException(ErrorCodeEnums.USER_NOT_FOUND));
     }
 
     @Transactional(rollbackFor = Exception.class)
     public Boolean deleteStudent(StudentRemoveCmd removeCmd) {
+        requireStudent(removeCmd.getId());
         relationService.remove(Wrappers.lambdaQuery(AssessmentStudentRelationPO.class)
                 .eq(AssessmentStudentRelationPO::getStudentId, removeCmd.getId()));
         recordService.remove(Wrappers.lambdaQuery(StudentAssessmentRecordPO.class)
@@ -130,7 +137,7 @@ public class StudentAppService {
                 .map(item -> UserPO.builder()
                         .name(item.getName())
                         .account(item.getAccount())
-                        .password(item.getPassword())
+                        .password(PasswordCodec.hash(item.getPassword()))
                         .schoolClass(item.getSchoolClass())
                         .type(UserRoleEnums.STUDENT.getRole())
                         .build())
@@ -165,7 +172,6 @@ public class StudentAppService {
                     .map(item -> StudentExcelDTO.builder()
                             .name(item.getName())
                             .account(item.getAccount())
-                            .password(item.getPassword())
                             .schoolClass(item.getSchoolClass())
                             .build())
                     .toList();
@@ -174,7 +180,6 @@ public class StudentAppService {
                 .map(item -> StudentExcelDTO.builder()
                         .name(item.getName())
                         .account(item.getAccount())
-                        .password(item.getPassword())
                         .schoolClass(item.getSchoolClass())
                         .build())
                 .toList();

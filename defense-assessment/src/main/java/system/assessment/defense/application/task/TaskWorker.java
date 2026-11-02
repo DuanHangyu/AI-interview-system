@@ -6,6 +6,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import system.assessment.defense.application.manage.AiCallException;
 import system.assessment.defense.application.manage.AiRateLimiter;
 import system.assessment.defense.infrastructure.repository.dao.mapper.AsyncTaskMapper;
 
@@ -19,6 +20,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -118,6 +120,13 @@ public class TaskWorker {
             taskMapper.defer(id, owner, 5);
             log.debug("task deferred, type:{}, bizId:{}, reason:{}", handler.type(), task.getBizId(), e.getMessage());
         } catch (Exception e) {
+            if (AiCallException.isRateLimited(e)) {
+                // 百炼账号限流：等配额恢复后再试，不计入失败次数，避免大批考试时转写被判为失败
+                int delay = 15 + ThreadLocalRandom.current().nextInt(30);
+                taskMapper.defer(id, owner, delay);
+                log.warn("task rate limited, retry in {}s, type:{}, bizId:{}", delay, handler.type(), task.getBizId());
+                return;
+            }
             int attempts = task.getAttempts() == null ? 1 : task.getAttempts();
             boolean giveUp = attempts >= task.getMaxAttempts();
             taskMapper.fail(id, owner, StringUtils.abbreviate(String.valueOf(e.getMessage()), 1000),

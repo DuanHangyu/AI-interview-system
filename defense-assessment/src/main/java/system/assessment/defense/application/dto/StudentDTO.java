@@ -29,9 +29,6 @@ public class StudentDTO {
     @Schema(description = "学生账号")
     private String account;
 
-    @Schema(description = "学生密码")
-    private String password;
-
     @Schema(description = "班级")
     private String schoolClass;
 

@@ -26,7 +26,6 @@ public class TeacherModifyCmd {
     private String account;
 
     @Schema(description = "密码")
-    @NotEmpty(message = "密码不能为空")
     private String password;
 
     @Schema(description = "手机号")

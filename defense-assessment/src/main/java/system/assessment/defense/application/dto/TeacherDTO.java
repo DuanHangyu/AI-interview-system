@@ -23,9 +23,6 @@ public class TeacherDTO {
     @Schema(description = "老师账号")
     private String account;
 
-    @Schema(description = "老师密码")
-    private String password;
-
     @Schema(description = "老师手机号")
     private String phone;
 

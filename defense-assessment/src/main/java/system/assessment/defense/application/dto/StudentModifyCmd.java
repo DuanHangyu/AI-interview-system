@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import system.assessment.defense.infrastructure.common.PasswordCodec;
 import system.assessment.defense.infrastructure.repository.dao.po.UserPO;
 
 /**
@@ -27,7 +28,6 @@ public class StudentModifyCmd {
     private String account;
 
     @Schema(description = "密码")
-    @NotEmpty(message = "密码不能为空")
     private String password;
 
     @Schema(description = "班级")
@@ -39,7 +39,7 @@ public class StudentModifyCmd {
                 .id(id)
                 .name(name)
                 .account(account)
-                .password(password)
+                .password(PasswordCodec.hashOrNull(password))
                 .type(0)
                 .schoolClass(schoolClass)
                 .build();

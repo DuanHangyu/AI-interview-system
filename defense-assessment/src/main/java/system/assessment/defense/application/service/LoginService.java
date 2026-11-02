@@ -9,6 +9,8 @@ import system.assessment.defense.application.dto.LoginDTO;
 import system.assessment.defense.application.dto.UserDetailDTO;
 import system.assessment.defense.infrastructure.emuns.ErrorCodeEnums;
 import system.assessment.defense.infrastructure.emuns.UserRoleEnums;
+import system.assessment.defense.infrastructure.common.PasswordCodec;
+import org.apache.commons.lang3.StringUtils;
 import system.assessment.defense.infrastructure.exception.BusinessException;
 import system.assessment.defense.infrastructure.repository.dao.po.UserPO;
 import system.assessment.defense.infrastructure.repository.dao.service.UserService;
@@ -29,8 +31,14 @@ public class LoginService {
     public String login(LoginDTO loginDTO) {
         Optional<UserPO> userOp = userService.findByAccount(loginDTO.getAccount());
         UserPO userPO = userOp.orElseThrow(() -> new BusinessException(ErrorCodeEnums.USER_NOT_FOUND));
-        if (!Objects.equals(userPO.getPassword(), loginDTO.getPassword())) {
+        if (!PasswordCodec.matches(loginDTO.getPassword(), userPO.getPassword())) {
             throw new BusinessException(ErrorCodeEnums.PASSWORD_ERROR);
+        }
+        if (!PasswordCodec.isHashed(userPO.getPassword())) {
+            // 早期明文密码：登录成功后就地升级为哈希
+            userService.update(Wrappers.lambdaUpdate(UserPO.class)
+                    .set(UserPO::getPassword, PasswordCodec.hash(loginDTO.getPassword()))
+                    .eq(UserPO::getId, userPO.getId()));
         }
         StpUtil.login(userPO.getId());
         return StpUtil.getTokenInfo().getTokenValue();
@@ -50,11 +58,14 @@ public class LoginService {
     public Boolean changePassword(int userId, ChangePasswordDTO changePassword) {
         Optional<UserPO> userOp = userService.findById(userId);
         UserPO userPo = userOp.orElseThrow(() -> new BusinessException(ErrorCodeEnums.USER_NOT_FOUND));
-        if (Objects.equals(changePassword.getPassword(), userPo.getPassword())) {
+        if (StringUtils.isBlank(changePassword.getPassword())) {
+            throw new BusinessException(400, "密码不能为空");
+        }
+        if (PasswordCodec.matches(changePassword.getPassword(), userPo.getPassword())) {
             throw new BusinessException(ErrorCodeEnums.PASSWORD_SAME);
         }
         return userService.update(Wrappers.lambdaUpdate(UserPO.class)
-                .set(UserPO::getPassword, changePassword.getPassword())
+                .set(UserPO::getPassword, PasswordCodec.hash(changePassword.getPassword()))
                 .eq(UserPO::getId, userId));
     }
 }

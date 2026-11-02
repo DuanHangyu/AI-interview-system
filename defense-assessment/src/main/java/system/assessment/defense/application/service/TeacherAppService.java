@@ -8,6 +8,10 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import system.assessment.defense.application.dto.*;
+import system.assessment.defense.infrastructure.common.PasswordCodec;
+import system.assessment.defense.infrastructure.emuns.ErrorCodeEnums;
+import system.assessment.defense.infrastructure.exception.BusinessException;
+import org.apache.commons.lang3.StringUtils;
 import system.assessment.defense.infrastructure.repository.dao.po.UserPO;
 import system.assessment.defense.infrastructure.repository.dao.service.UserService;
 
@@ -34,19 +38,33 @@ public class TeacherAppService {
     }
 
     public Boolean createStudent(TeacherCreateCmd createCmd) {
+        if (StringUtils.isBlank(createCmd.getPassword())) {
+            throw new BusinessException(400, "密码不能为空");
+        }
         UserPO userPO = BeanUtil.copyProperties(createCmd, UserPO.class);
+        userPO.setPassword(PasswordCodec.hash(createCmd.getPassword()));
         userPO.setType(1);
         return userService.save(userPO);
     }
 
     public Boolean modifyStudent(TeacherModifyCmd modifyCmd) {
+        requireTeacher(modifyCmd.getId());
         UserPO userPO = BeanUtil.copyProperties(modifyCmd, UserPO.class);
+        userPO.setPassword(PasswordCodec.hashOrNull(modifyCmd.getPassword()));
         userPO.setType(1);
         return userService.updateById(userPO);
     }
 
     public Boolean deleteStudent(TeacherRemoveCmd removeCmd) {
+        requireTeacher(removeCmd.getId());
         return userService.removeById(removeCmd.getId());
+    }
+
+    /** 教师管理接口只能操作教师账号（不能借此修改管理员或学生） */
+    private void requireTeacher(Integer id) {
+        userService.findById(id)
+                .filter(user -> Objects.equals(user.getType(), 1))
+                .orElseThrow(() -> new BusinessException(ErrorCodeEnums.USER_NOT_FOUND));
     }
 
     public List<TeacherDTO> allTeacher() {

@@ -108,10 +108,10 @@
         <FormItem
           label="登录密码"
           name="password"
-          :rules="[{ required: true, message: '请输入登录密码' }, ...(editing.id ? [] : [{ min: 6, message: '密码至少 6 位' }])]"
-          :extra="editing.id ? '不修改密码请保持原值' : ''"
+          :rules="editing.id ? [{ min: 6, message: '密码至少 6 位' }] : [{ required: true, message: '请输入登录密码' }, { min: 6, message: '密码至少 6 位' }]"
+          :extra="editing.id ? '留空则不修改密码' : ''"
         >
-          <InputPassword v-model:value="editing.password" placeholder="至少 6 位" autocomplete="new-password" />
+          <InputPassword v-model:value="editing.password" :placeholder="editing.id ? '留空则不修改' : '至少 6 位'" autocomplete="new-password" />
         </FormItem>
       </Form>
     </Modal>
@@ -252,13 +252,12 @@ const editing = reactive<Record<string, any>>({});
 
 function openEdit(record?: Record<string, any>) {
   for (const key of Object.keys(editing)) delete editing[key];
-  // 修改接口要求带上密码，编辑时沿用原密码
   Object.assign(editing, {
     id: record?.id,
     name: record?.name || "",
     account: record?.account || "",
     schoolClass: record?.schoolClass || "",
-    password: record?.password || "",
+    password: "",
   });
   editOpen.value = true;
 }
@@ -272,7 +271,8 @@ async function save() {
       name: editing.name.trim(),
       account: editing.account.trim(),
       schoolClass: editing.schoolClass.trim(),
-      password: editing.password,
+      // 编辑时留空表示不修改密码
+      password: editing.password || undefined,
     };
     if (editing.id) await modifyStudent(params);
     else await createStudent(params);

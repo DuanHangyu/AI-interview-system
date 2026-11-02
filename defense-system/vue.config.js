@@ -18,6 +18,8 @@ const devServerHost = process.env.WDS_SOCKET_HOST || "localhost";
 const devServerSocketPort = process.env.WDS_SOCKET_PORT || devServerPort;
 
 module.exports = defineConfig({
+  // 不发布 source map：减小部署体积，也不暴露源码
+  productionSourceMap: false,
   devServer: {
     port: devServerPort,
     client: {
