@@ -29,6 +29,7 @@ import system.assessment.defense.infrastructure.repository.dao.service.StudentAs
 import system.assessment.defense.infrastructure.repository.dao.service.UserService;
 
 import system.assessment.defense.application.dto.backed.RecordReviewCmd;
+import system.assessment.defense.application.service.interview.AnswerRows;
 import system.assessment.defense.infrastructure.common.CriteriaParser;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -189,7 +190,8 @@ public class StudyRecordService {
         for (AnalysisDTO dimension : aiDimensions) {
             int score = submitted.getOrDefault(dimension.getName(),
                     Optional.ofNullable(dimension.getScore()).orElse(0));
-            Integer max = CriteriaParser.maxScoreOf(maxScores, dimension.getName());
+            Integer max = Optional.ofNullable(dimension.getMaxScore())
+                    .orElseGet(() -> CriteriaParser.maxScoreOf(maxScores, dimension.getName()));
             if (score < 0 || (max != null && score > max)) {
                 throw new BusinessException(400, String.format("“%s”的分数应在 0～%s 之间",
                         dimension.getName(), max == null ? "满分" : max));
@@ -197,8 +199,11 @@ public class StudyRecordService {
             dimensions.add(new TeacherReviewBO.DimensionScore(dimension.getName(), score));
             total += score;
         }
-        if (setting != null && setting.getTotalScore() != null && total > setting.getTotalScore()) {
-            throw new BusinessException(400, "各维度分数之和不能超过总分 " + setting.getTotalScore());
+        Integer totalLimit = aiDimensions.stream().allMatch(d -> d.getMaxScore() != null)
+                ? Integer.valueOf(aiDimensions.stream().mapToInt(AnalysisDTO::getMaxScore).sum())
+                : (setting == null ? null : setting.getTotalScore());
+        if (totalLimit != null && total > totalLimit) {
+            throw new BusinessException(400, "各维度分数之和不能超过总分 " + totalLimit);
         }
         String reviewerName = userService.findById(teacherId).map(UserPO::getName).orElse(null);
         TeacherReviewBO review = TeacherReviewBO.builder()
@@ -286,18 +291,19 @@ public class StudyRecordService {
                     excelDTO.setCheckScore(record.getCheckScore());
                     excelDTO.setDefenseAnswer(record.getDefenseContent());
                     List<StudentAssessmentQuestionAnswerPO> matchQuestionAnswers = assessmentStudentIdMap.getOrDefault(record.getAssessmentId(), new HashMap<>()).getOrDefault(record.getStudentId(), Collections.emptyList());
+                    Map<Integer, List<StudentAssessmentQuestionAnswerPO>> followRows = AnswerRows.followUps(matchQuestionAnswers);
                     StringBuilder questionAnswerBuilder = new StringBuilder();
-                    for (StudentAssessmentQuestionAnswerPO questionAnswer : matchQuestionAnswers) {
+                    for (StudentAssessmentQuestionAnswerPO questionAnswer : AnswerRows.mains(matchQuestionAnswers)) {
                         questionAnswerBuilder
                                 .append("问题：").append(questionAnswer.getQuestion())
                                 .append("\n")
                                 .append("回答：").append(questionAnswer.getAnswer())
                                 .append("\n");
-                        if (StringUtils.isNotBlank(questionAnswer.getFollowQuestion())) {
+                        for (StudentAssessmentQuestionAnswerPO follow : followRows.getOrDefault(questionAnswer.getId(), List.of())) {
                             questionAnswerBuilder
-                                    .append("追问问题：").append(questionAnswer.getFollowQuestion())
+                                    .append("追问：").append(follow.getQuestion())
                                     .append("\n")
-                                    .append("追问回答：").append(questionAnswer.getFollowAnswer())
+                                    .append("追问回答：").append(follow.getAnswer())
                                     .append("\n");
                         }
                         questionAnswerBuilder.append("\n");

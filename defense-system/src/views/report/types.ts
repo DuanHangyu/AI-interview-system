@@ -4,6 +4,26 @@ export interface ReportDimension {
   score: number;
   maxScore?: number | null;
   description?: string;
+  /** 所在分档，如“4-5分”（按题目评分标准评分时） */
+  level?: string | null;
+  hitPoints?: string[] | null;
+  missedPoints?: string[] | null;
+}
+
+export interface ReportQuestionDimension {
+  name: string;
+  level?: string | null;
+  score: number;
+  maxScore?: number | null;
+  hitPoints?: string[] | null;
+  missedPoints?: string[] | null;
+  comment?: string | null;
+}
+
+export interface ReportFollowUp {
+  question?: string | null;
+  answer?: string | null;
+  answerFile?: string | null;
 }
 
 export interface ReportQa {
@@ -11,9 +31,8 @@ export interface ReportQa {
   question?: string;
   answer?: string;
   answerFile?: string | null;
-  followQuestion?: string | null;
-  followAnswer?: string | null;
-  followAnswerFile?: string | null;
+  followUps?: ReportFollowUp[] | null;
+  dimensions?: ReportQuestionDimension[] | null;
   strength?: string | null;
   weakness?: string | null;
   suggestion?: string | null;

@@ -1,7 +1,6 @@
 package system.assessment.defense.application.task;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.baomidou.mybatisplus.core.toolkit.support.SFunction;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
@@ -72,12 +71,33 @@ public class InterviewTaskHandlers {
 
     @Bean
     public TaskHandler answerTranscriptionHandler() {
-        return answerHandler(TaskTypes.ASR_ANSWER, false);
-    }
+        return new SimpleHandler(TaskTypes.ASR_ANSWER, asrConcurrency, 900) {
+            @Override
+            public void handle(Integer answerId) {
+                StudentAssessmentQuestionAnswerPO answer = answerService.getById(answerId);
+                if (answer == null || answer.getAnswerVoice() == null || answer.getAnswer() != null) {
+                    return;
+                }
+                save(answerId, answer.getAnswerVoice(),
+                        transcribeAnswer(fileStorage.read(answer.getAnswerVoice()), answer.getQuestion()));
+            }
 
-    @Bean
-    public TaskHandler followUpTranscriptionHandler() {
-        return answerHandler(TaskTypes.ASR_FOLLOW_UP, true);
+            @Override
+            public void onGiveUp(Integer answerId, Exception lastError) {
+                StudentAssessmentQuestionAnswerPO answer = answerService.getById(answerId);
+                if (answer != null && answer.getAnswerVoice() != null) {
+                    save(answerId, answer.getAnswerVoice(), TRANSCRIBE_FAILED);
+                }
+            }
+
+            private void save(Integer answerId, String voice, String text) {
+                // 带上录音 key 条件：重考后同一行被重置时不会写入旧录音的转写结果
+                answerService.update(Wrappers.lambdaUpdate(StudentAssessmentQuestionAnswerPO.class)
+                        .set(StudentAssessmentQuestionAnswerPO::getAnswer, text)
+                        .eq(StudentAssessmentQuestionAnswerPO::getId, answerId)
+                        .eq(StudentAssessmentQuestionAnswerPO::getAnswerVoice, voice));
+            }
+        };
     }
 
     @Bean
@@ -107,46 +127,6 @@ public class InterviewTaskHandlers {
             public int maxAttempts() {
                 // 预生成失败不影响面试：学生端会现场合成或使用浏览器朗读
                 return 3;
-            }
-        };
-    }
-
-    private TaskHandler answerHandler(String type, boolean followUp) {
-        SFunction<StudentAssessmentQuestionAnswerPO, String> voiceColumn = followUp
-                ? StudentAssessmentQuestionAnswerPO::getFollowAnswerVoice : StudentAssessmentQuestionAnswerPO::getAnswerVoice;
-        SFunction<StudentAssessmentQuestionAnswerPO, String> textColumn = followUp
-                ? StudentAssessmentQuestionAnswerPO::getFollowAnswer : StudentAssessmentQuestionAnswerPO::getAnswer;
-        return new SimpleHandler(type, asrConcurrency, 900) {
-            @Override
-            public void handle(Integer answerId) {
-                StudentAssessmentQuestionAnswerPO answer = answerService.getById(answerId);
-                if (answer == null) {
-                    return;
-                }
-                String voice = followUp ? answer.getFollowAnswerVoice() : answer.getAnswerVoice();
-                String existing = followUp ? answer.getFollowAnswer() : answer.getAnswer();
-                if (voice == null || existing != null) {
-                    return;
-                }
-                String question = followUp ? answer.getFollowQuestion() : answer.getQuestion();
-                save(answerId, voice, transcribeAnswer(fileStorage.read(voice), question));
-            }
-
-            @Override
-            public void onGiveUp(Integer answerId, Exception lastError) {
-                StudentAssessmentQuestionAnswerPO answer = answerService.getById(answerId);
-                String voice = answer == null ? null : (followUp ? answer.getFollowAnswerVoice() : answer.getAnswerVoice());
-                if (voice != null) {
-                    save(answerId, voice, TRANSCRIBE_FAILED);
-                }
-            }
-
-            private void save(Integer answerId, String voice, String text) {
-                // 带上录音 key 条件：重考后同一行被重置时不会写入旧录音的转写结果
-                answerService.update(Wrappers.lambdaUpdate(StudentAssessmentQuestionAnswerPO.class)
-                        .set(textColumn, text)
-                        .eq(StudentAssessmentQuestionAnswerPO::getId, answerId)
-                        .eq(voiceColumn, voice));
             }
         };
     }

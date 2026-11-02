@@ -47,6 +47,9 @@ public class AssessmentSettingsModifyCmd {
     @NotNull(message = "是否需要追问不能为空")
     private Boolean followUp;
 
+    @Schema(description = "每道题的追问个数，为空表示全部提问")
+    private Integer followUpCount;
+
     @Schema(description = "追问提示词")
     private String followUpPrompt;
 
@@ -100,6 +103,7 @@ public class AssessmentSettingsModifyCmd {
                 .questionCount(questionCount)
                 .answerTime(answerTime)
                 .followUp(followUp)
+                .followUpCount(followUpCount)
                 .followUpPrompt(followUpPrompt)
                 .followUpStandards(followUpStandards)
                 .assessmentFiles(assessmentFiles == null ? "" : JSONUtil.toJsonStr(assessmentFiles))
@@ -114,5 +118,8 @@ public class AssessmentSettingsModifyCmd {
 
     public void check() {
         QuestionBankService.validate(question, questionCount, questions);
+        if (Boolean.TRUE.equals(question)) {
+            QuestionBankService.applyRubricTotal(this::setTotalScore, questionCount, questions);
+        }
     }
 }

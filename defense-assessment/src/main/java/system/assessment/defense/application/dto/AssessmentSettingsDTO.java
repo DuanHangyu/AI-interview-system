@@ -48,6 +48,9 @@ public class AssessmentSettingsDTO {
     @NotNull(message = "是否需要追问不能为空")
     private Boolean followUp;
 
+    @Schema(description = "每道题的追问个数，为空表示全部提问")
+    private Integer followUpCount;
+
     @Schema(description = "追问提示词")
     private String followUpPrompt;
 

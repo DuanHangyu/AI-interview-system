@@ -21,7 +21,7 @@ class AiTextParsingTest {
                 ```""");
         assertThat(items).hasSize(2);
         assertThat(items.get(0).getContent()).isEqualTo("介绍你的缓存设计");
-        assertThat(items.get(0).getFollowUpQuestion()).isEqualTo("如何保证一致性？");
+        assertThat(items.get(0).getFollowUps()).extracting("content").containsExactly("如何保证一致性？");
         assertThat(items.get(1).getDimension()).isNull();
         assertThat(items.get(1).getReferenceAnswer()).isEqualTo("定位过程\n方案对比");
     }

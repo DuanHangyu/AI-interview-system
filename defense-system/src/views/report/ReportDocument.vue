@@ -47,9 +47,12 @@
         <div class="rp-label">
           [{{ dim.name }}]
           <span class="num">{{ dim.score }}/{{ dim.maxScore ?? "—" }} 分</span>
+          <span v-if="dim.level" class="rp-level num">{{ dim.level }}档</span>
           <span v-if="dim.score !== dim.aiScore" class="rp-ai num">（AI 初评 {{ dim.aiScore }} 分）</span>
         </div>
         <p v-if="dim.description" class="rp-blue">{{ dim.description }}</p>
+        <p v-if="dim.hitPoints?.length" class="rp-points"><b>已答到：</b>{{ dim.hitPoints.join("；") }}</p>
+        <p v-if="dim.missedPoints?.length" class="rp-points"><b>未答到：</b>{{ dim.missedPoints.join("；") }}</p>
       </div>
     </section>
 
@@ -82,18 +85,20 @@
         <div class="rp-label">[回答内容]</div>
         <p class="rp-answer">{{ item.answer || "（未作答）" }}</p>
         <audio v-if="item.answerFile" :src="item.answerFile" controls preload="none" class="rp-audio no-print"></audio>
-        <template v-if="item.followQuestion">
-          <div class="rp-label">[追问内容]</div>
-          <p>{{ plain(item.followQuestion) }}</p>
-          <div class="rp-label">[追问回答]</div>
-          <p class="rp-answer">{{ item.followAnswer || "（未作答）" }}</p>
-          <audio
-            v-if="item.followAnswerFile"
-            :src="item.followAnswerFile"
-            controls
-            preload="none"
-            class="rp-audio no-print"
-          ></audio>
+        <template v-for="(f, k) in item.followUps || []" :key="k">
+          <div class="rp-label">[追问{{ (item.followUps || []).length > 1 ? k + 1 : "" }}]</div>
+          <p>{{ plain(f.question) }}</p>
+          <div class="rp-label">[追问{{ (item.followUps || []).length > 1 ? k + 1 : "" }}回答]</div>
+          <p class="rp-answer">{{ f.answer || "（未作答）" }}</p>
+          <audio v-if="f.answerFile" :src="f.answerFile" controls preload="none" class="rp-audio no-print"></audio>
+        </template>
+        <!-- 抽了多道题时逐题列出维度得分；只有一道题时与[分项评分]相同，不重复 -->
+        <template v-if="qa.length > 1 && item.dimensions?.length">
+          <div class="rp-label">[本题评分]</div>
+          <p v-for="d in item.dimensions" :key="d.name" class="rp-blue">
+            <b>{{ d.name }}</b><span class="num">{{ d.score }}/{{ d.maxScore ?? "—" }} 分</span
+            ><template v-if="d.level">（{{ d.level }}档）</template><template v-if="d.comment">：{{ d.comment }}</template>
+          </p>
         </template>
         <template v-if="item.strength">
           <div class="rp-label">[优势]</div>
@@ -325,6 +330,21 @@ function hasComment(c: { strength?: string | null; weakness?: string | null; sug
 .rp-ai {
   font-weight: 400;
   color: #666;
+}
+
+.rp-level {
+  margin-left: 6px;
+  font-weight: 400;
+  color: #666;
+}
+
+.rp-points {
+  color: #333;
+  font-size: 14px;
+}
+
+.rp-points b {
+  font-family: "Times New Roman", "SimHei", "黑体", "Microsoft YaHei", sans-serif;
 }
 
 .rp-item {

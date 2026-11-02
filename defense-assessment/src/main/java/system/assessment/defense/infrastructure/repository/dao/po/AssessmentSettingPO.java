@@ -60,6 +60,11 @@ public class AssessmentSettingPO {
     @Schema(description = "是否需要追问")
     private Boolean followUp;
 
+    /**
+     * 每道题的追问个数；为空或不少于题目的追问数时全部提问，否则随机抽取
+     */
+    private Integer followUpCount;
+
     @Schema(description = "追问提示词")
     private String followUpPrompt;
 

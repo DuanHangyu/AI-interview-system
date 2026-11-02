@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -27,4 +29,13 @@ public class ReportDimensionDTO {
 
     @Schema(description = "AI 评语")
     private String description;
+
+    @Schema(description = "所在分档，例如“4-5分”")
+    private String level;
+
+    @Schema(description = "已答到的考察点")
+    private List<String> hitPoints;
+
+    @Schema(description = "未答到或有误的考察点")
+    private List<String> missedPoints;
 }

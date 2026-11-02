@@ -10,6 +10,10 @@ export type InterviewStatus =
 export interface InterviewQuestion {
   index: number;
   followUp: boolean;
+  /** 0 为主问题，1、2… 为第几个追问 */
+  followIndex: number;
+  /** 本题的追问总数 */
+  followTotal: number;
   content: string;
 }
 
@@ -74,15 +78,16 @@ export function uploadDefenseAudio(
 export function uploadAnswerAudio(
   assessmentId: number | string,
   index: number,
-  followUp: boolean,
+  followIndex: number,
   audio: Blob,
   onProgress?: (percent: number) => void
 ) {
   const form = new FormData();
   form.append("assessmentId", String(assessmentId));
   form.append("index", String(index));
-  form.append("followUp", followUp ? "true" : "false");
-  form.append("audio", audio, `answer-${index}${followUp ? "-follow" : ""}.wav`);
+  form.append("followUp", followIndex > 0 ? "true" : "false");
+  form.append("followIndex", String(followIndex));
+  form.append("audio", audio, `answer-${index}${followIndex > 0 ? `-follow${followIndex}` : ""}.wav`);
   return request({
     url: "/front/interview/answer",
     method: "post",
@@ -108,12 +113,12 @@ export function submitInterview(assessmentId: number | string) {
 export function getQuestionAudio(
   assessmentId: number | string,
   index: number,
-  followUp: boolean
+  followIndex: number
 ) {
   return request({
     url: "/front/interview/question-audio",
     method: "get",
-    params: { assessmentId, index, followUp },
+    params: { assessmentId, index, followUp: followIndex > 0, followIndex },
     responseType: "blob",
     timeout: 8000,
   });

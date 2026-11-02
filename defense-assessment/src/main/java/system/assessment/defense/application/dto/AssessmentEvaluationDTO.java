@@ -49,12 +49,6 @@ public class AssessmentEvaluationDTO {
                             if (StringUtils.isBlank(evaluation.getAnswer())) {
                                 evaluation.setAnswer(item.getAnswer());
                             }
-                            if (StringUtils.isBlank(evaluation.getFollowQuestion())) {
-                                evaluation.setFollowQuestion(item.getFollowQuestion());
-                            }
-                            if (StringUtils.isBlank(evaluation.getFollowAnswer())) {
-                                evaluation.setFollowAnswer(item.getFollowAnswer());
-                            }
                         });
             }
         }

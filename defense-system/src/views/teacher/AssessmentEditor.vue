@@ -109,7 +109,14 @@
                   <span class="ml-3 inline-flex items-center gap-2">
                     <Switch v-model:checked="form.followUp" size="small" />
                     <span>启用追问</span>
-                    <Tooltip title="题库中填写了追问的题目，学生回答后会继续回答追问">
+                    <Tooltip title="题目设置了追问时，学生回答主问题后继续回答追问">
+                      <QuestionCircleOutlined class="muted" />
+                    </Tooltip>
+                  </span>
+                  <span v-if="form.followUp" class="inline-flex items-center gap-2">
+                    <span class="muted">每题追问</span>
+                    <Select v-model:value="form.followUpCount" :options="followUpCountOptions" class="w-[150px]" />
+                    <Tooltip title="选择“全部”时题目里的追问依次全部提问；选择具体个数时，从该题的追问中随机抽取，按原顺序提问">
                       <QuestionCircleOutlined class="muted" />
                     </Tooltip>
                   </span>
@@ -161,8 +168,15 @@
                 </template>
                 <template v-else-if="column.key === 'content'">
                   <div class="q-content">{{ record.content }}</div>
-                  <div v-if="record.referenceAnswer" class="q-sub">参考答案：{{ record.referenceAnswer }}</div>
-                  <div v-if="form.followUp && record.followUpQuestion" class="q-sub">追问：{{ record.followUpQuestion }}</div>
+                  <div v-if="record.rubric" class="q-sub">
+                    评分标准：{{ rubricSummary(record.rubric) }}
+                  </div>
+                  <div v-else-if="record.referenceAnswer" class="q-sub">参考答案：{{ record.referenceAnswer }}</div>
+                  <div v-if="record.followUps.length" class="q-sub">
+                    追问 {{ record.followUps.length }} 个<template v-if="!form.followUp">（未启用追问）</template>：{{
+                      record.followUps.map((f) => f.content).join(" / ")
+                    }}
+                  </div>
                 </template>
                 <template v-else-if="column.key === 'audio'">
                   <Tag v-if="audioState(record) === 'ready'" :bordered="false" color="success">已生成</Tag>
@@ -194,18 +208,37 @@
         <!-- 评分设置 -->
         <section class="card card-pad">
           <h2 class="sec-title">评分设置</h2>
+          <Alert
+            v-if="rubricMode"
+            class="mb-4"
+            type="info"
+            show-icon
+            :message="`题库中的题目都设置了评分标准，AI 将按每道题自己的评分标准逐维度评分。满分 = 每题 ${rubricTotal} 分 × 抽题 ${form.questionCount || 0} 题。`"
+          />
           <div class="grid grid-cols-2 gap-x-6 max-w-[520px]">
-            <FormItem label="满分" name="totalScore" :rules="[{ required: true, message: '请输入满分' }]">
-              <InputNumber v-model:value="form.totalScore" :min="1" :max="1000" :precision="0" class="w-full" />
+            <FormItem
+              label="满分"
+              name="totalScore"
+              :rules="[{ required: true, message: '请输入满分' }]"
+              :extra="rubricMode ? '由题目评分标准自动计算' : undefined"
+            >
+              <InputNumber
+                v-model:value="form.totalScore"
+                :min="1"
+                :max="1000"
+                :precision="0"
+                :disabled="rubricMode"
+                class="w-full"
+              />
             </FormItem>
             <FormItem label="及格分" name="passScore" :rules="[{ required: true, validator: validatePass }]">
               <InputNumber v-model:value="form.passScore" :min="0" :max="1000" :precision="0" class="w-full" />
             </FormItem>
           </div>
           <FormItem
-            label="评分标准"
+            :label="rubricMode ? '整体评分标准（可选）' : '评分标准'"
             name="assessmentCriteria"
-            :rules="[{ required: true, whitespace: true, message: '请输入评分标准' }]"
+            :rules="rubricMode ? [] : [{ required: true, whitespace: true, message: '请输入评分标准' }]"
           >
             <Textarea
               v-model:value="form.assessmentCriteria"
@@ -213,7 +246,10 @@
               placeholder="按维度写出评分标准，例如：&#10;技术实现（40分）：方案是否合理，是否有深度&#10;工程质量（30分）：测试是否充分，系统是否稳定&#10;表达能力（30分）：表达是否清晰，逻辑是否完整"
             />
             <template #extra>
-              AI 按这里的维度逐项打分。维度写成“名称（分值）”的形式，报告中会显示每个维度的满分。题库中题目的“维度”建议与这里一致。
+              <template v-if="rubricMode">已使用题目评分标准，这里只作为 AI 生成题目草稿时的参考。</template>
+              <template v-else>
+                AI 按这里的维度逐项打分。维度写成“名称（分值）”的形式，报告中会显示每个维度的满分。也可以在每道题里单独设置评分标准。
+              </template>
             </template>
           </FormItem>
           <FormItem class="mb-0">
@@ -299,7 +335,7 @@
     <Modal
       v-model:open="questionOpen"
       :title="editingIndex === null ? '添加题目' : `编辑第 ${editingIndex + 1} 题`"
-      :width="640"
+      :width="860"
       ok-text="确定"
       @ok="saveQuestion"
     >
@@ -318,14 +354,86 @@
         <FormItem label="参考答案" name="referenceAnswer" extra="可选。AI 评分时会对照参考答案的要点">
           <Textarea v-model:value="editing.referenceAnswer" :auto-size="{ minRows: 2, maxRows: 8 }" placeholder="答题要点" />
         </FormItem>
-        <FormItem
-          label="追问"
-          name="followUpQuestion"
-          class="mb-0"
-          :extra="form.followUp ? '可选。学生回答本题后继续回答这个追问' : '当前未启用追问，需在面试流程中开启'"
-        >
-          <Input v-model:value="editing.followUpQuestion" :disabled="!form.followUp" placeholder="追问内容" />
-        </FormItem>
+
+        <div class="edit-block">
+          <div class="edit-block-head">
+            <span class="font-medium">追问</span>
+            <span class="muted text-xs">
+              {{ form.followUp ? "学生回答主问题后依次回答追问；考察意图只给 AI 评分参考，不会播报" : "当前未启用追问，需在面试流程中开启" }}
+            </span>
+            <Button size="small" class="ml-auto" @click="editing.followUps.push({ content: '', intent: '' })">
+              <template #icon><PlusOutlined /></template>添加追问
+            </Button>
+          </div>
+          <div v-for="(f, k) in editing.followUps" :key="k" class="edit-row">
+            <div class="edit-row-no num">{{ k + 1 }}</div>
+            <div class="flex-1 min-w-0">
+              <Textarea v-model:value="f.content" :auto-size="{ minRows: 2, maxRows: 6 }" placeholder="追问内容（会播报给学生）" />
+              <Textarea
+                v-model:value="f.intent"
+                class="mt-2"
+                :auto-size="{ minRows: 1, maxRows: 4 }"
+                placeholder="考察意图（可选）"
+              />
+            </div>
+            <Button type="text" danger size="small" @click="editing.followUps.splice(k, 1)">删除</Button>
+          </div>
+          <div v-if="!editing.followUps.length" class="muted text-[13px]">没有追问</div>
+        </div>
+
+        <div class="edit-block mb-0">
+          <div class="edit-block-head">
+            <span class="font-medium">本题评分标准</span>
+            <span class="muted text-xs">
+              {{ editing.rubric ? `共 ${editingRubricTotal} 分` : "未设置时按“评分设置”中的整体评分标准评分" }}
+            </span>
+            <Space class="ml-auto" :size="8">
+              <Button v-if="!editing.rubric" size="small" @click="useRubricTemplate">使用四维模板</Button>
+              <Button v-if="editing.rubric" size="small" @click="addDimension">
+                <template #icon><PlusOutlined /></template>添加维度
+              </Button>
+              <Popconfirm v-if="editing.rubric" title="确定清空本题评分标准吗？" @confirm="editing.rubric = null">
+                <Button size="small" danger>清空</Button>
+              </Popconfirm>
+            </Space>
+          </div>
+          <template v-if="editing.rubric">
+            <div v-for="(d, di) in editing.rubric.dimensions" :key="di" class="dim-card">
+              <div class="flex items-center gap-2">
+                <Input v-model:value="d.name" placeholder="维度名称，如：知识维度" class="w-[180px]" />
+                <InputNumber v-model:value="d.maxScore" :min="1" :max="100" :precision="0" addon-after="分" class="w-[110px]" />
+                <Input v-model:value="d.focus" placeholder="考察重点（可选）" class="flex-1" />
+                <Button type="text" danger size="small" @click="editing.rubric.dimensions.splice(di, 1)">删除</Button>
+              </div>
+              <Textarea
+                v-model:value="d.pointsText"
+                class="mt-2"
+                :auto-size="{ minRows: 2, maxRows: 8 }"
+                placeholder="核心考察点，每行一条"
+              />
+              <div v-for="(lv, li) in d.levels" :key="li" class="flex items-start gap-2 mt-2">
+                <Input v-model:value="lv.range" placeholder="如：4-5分" class="w-[100px] shrink-0" />
+                <Textarea
+                  v-model:value="lv.description"
+                  :auto-size="{ minRows: 1, maxRows: 6 }"
+                  placeholder="该档的具体表现"
+                  class="flex-1"
+                />
+                <Button type="text" danger size="small" @click="d.levels.splice(li, 1)">删除</Button>
+              </div>
+              <Button type="link" size="small" class="px-0 mt-1" @click="d.levels.push({ range: '', description: '' })">
+                + 添加分档
+              </Button>
+            </div>
+            <FormItem label="评分说明" class="mb-0 mt-3">
+              <Textarea
+                v-model:value="editing.rubric.notes"
+                :auto-size="{ minRows: 2, maxRows: 6 }"
+                placeholder="可选，例如：概念有偏差但能通过追问修正的，可在能力维度酌情给分"
+              />
+            </FormItem>
+          </template>
+        </div>
       </Form>
     </Modal>
 
@@ -375,7 +483,7 @@
                 <span class="font-medium">{{ item.content }}</span>
               </div>
               <div v-if="item.referenceAnswer" class="q-sub">参考答案：{{ item.referenceAnswer }}</div>
-              <div v-if="item.followUpQuestion" class="q-sub">追问：{{ item.followUpQuestion }}</div>
+              <div v-if="item.followUps?.length" class="q-sub">追问：{{ item.followUps[0].content }}</div>
             </div>
           </label>
         </div>
@@ -385,7 +493,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   Alert,
@@ -427,13 +535,37 @@ import { getSchoolClassStudent } from "@/api/student";
 import { getAllTeachers } from "@/api/teacher";
 import { getToken } from "@/utils/auth";
 
+interface FollowUp {
+  content: string;
+  intent: string;
+}
+
+interface RubricLevel {
+  range: string;
+  description: string;
+}
+
+interface RubricDimension {
+  name: string;
+  maxScore: number | undefined;
+  focus: string;
+  points: string[];
+  levels: RubricLevel[];
+}
+
+interface Rubric {
+  dimensions: RubricDimension[];
+  notes: string;
+}
+
 interface Question {
   __key: string;
   id?: number;
   dimension: string;
   content: string;
   referenceAnswer: string;
-  followUpQuestion: string;
+  followUps: FollowUp[];
+  rubric: Rubric | null;
   audioReady?: boolean;
   // 已保存题目的原始内容，用于判断语音是否需要重新生成
   savedContent?: string;
@@ -463,6 +595,8 @@ const form = reactive({
   questionCount: 3 as number | undefined,
   answerTime: 120 as number | undefined,
   followUp: true,
+  // 0 表示题目里的追问全部提问
+  followUpCount: 0,
   totalScore: 100 as number | undefined,
   passScore: 60 as number | undefined,
   assessmentCriteria: "",
@@ -544,11 +678,56 @@ function makeQuestion(item: Record<string, any> = {}, saved = false): Question {
     dimension: item.dimension || "",
     content: item.content || "",
     referenceAnswer: item.referenceAnswer || "",
-    followUpQuestion: item.followUpQuestion || "",
+    followUps: (item.followUps || []).map((f: Record<string, any>) => ({
+      content: f.content || "",
+      intent: f.intent || "",
+    })),
+    rubric: normalizeRubric(item.rubric),
     audioReady: saved ? item.audioReady : undefined,
     savedContent: saved ? item.content : undefined,
   };
 }
+
+function normalizeRubric(raw: any): Rubric | null {
+  if (!raw || !Array.isArray(raw.dimensions) || !raw.dimensions.length) return null;
+  return {
+    dimensions: raw.dimensions.map((d: Record<string, any>) => ({
+      name: d.name || "",
+      maxScore: d.maxScore ?? undefined,
+      focus: d.focus || "",
+      points: Array.isArray(d.points) ? [...d.points] : [],
+      levels: (d.levels || []).map((l: Record<string, any>) => ({ range: l.range || "", description: l.description || "" })),
+    })),
+    notes: raw.notes || "",
+  };
+}
+
+function rubricTotalOf(rubric: Rubric | null) {
+  return (rubric?.dimensions || []).reduce((sum, d) => sum + (Number(d.maxScore) || 0), 0);
+}
+
+function rubricSummary(rubric: Rubric) {
+  const dims = rubric.dimensions.map((d) => `${d.name} ${d.maxScore ?? "—"}分`).join("、");
+  return `${dims}，共 ${rubricTotalOf(rubric)} 分`;
+}
+
+const followUpCountOptions = [
+  { label: "全部", value: 0 },
+  ...[1, 2, 3, 4, 5].map((n) => ({ label: `随机抽 ${n} 个`, value: n })),
+];
+
+// 所有题目都设置了评分标准时，按题目评分标准评分，满分由标准决定
+const rubricMode = computed(
+  () => form.question && questions.value.length > 0 && questions.value.every((q) => q.rubric)
+);
+const rubricTotal = computed(() => (rubricMode.value ? rubricTotalOf(questions.value[0].rubric) : 0));
+watch(
+  [rubricMode, rubricTotal, () => form.questionCount],
+  () => {
+    if (rubricMode.value) form.totalScore = rubricTotal.value * (form.questionCount || 1);
+  },
+  { immediate: true }
+);
 
 const questionColumns = [
   { title: "#", key: "index", width: 48 },
@@ -587,7 +766,38 @@ function move(index: number, offset: number) {
 const questionOpen = ref(false);
 const questionFormRef = ref();
 const editingIndex = ref<number | null>(null);
-const editing = reactive({ dimension: "", content: "", referenceAnswer: "", followUpQuestion: "" });
+// 编辑中的评分维度：考察点用多行文本编辑
+type EditingDimension = Omit<RubricDimension, "points"> & { pointsText: string };
+const editing = reactive({
+  dimension: "",
+  content: "",
+  referenceAnswer: "",
+  followUps: [] as FollowUp[],
+  rubric: null as { dimensions: EditingDimension[]; notes: string } | null,
+});
+const editingRubricTotal = computed(() =>
+  (editing.rubric?.dimensions || []).reduce((sum, d) => sum + (Number(d.maxScore) || 0), 0)
+);
+
+const RUBRIC_TEMPLATE = ["知识维度", "能力维度", "素养维度", "价值维度"];
+
+function emptyDimension(name = ""): EditingDimension {
+  return {
+    name,
+    maxScore: 5,
+    focus: "",
+    pointsText: "",
+    levels: ["4-5分", "2-3分", "0-1分"].map((range) => ({ range, description: "" })),
+  };
+}
+
+function useRubricTemplate() {
+  editing.rubric = { dimensions: RUBRIC_TEMPLATE.map((n) => emptyDimension(n)), notes: "" };
+}
+
+function addDimension() {
+  editing.rubric?.dimensions.push(emptyDimension());
+}
 
 function openQuestion(index?: number) {
   editingIndex.value = index ?? null;
@@ -596,19 +806,74 @@ function openQuestion(index?: number) {
     dimension: q?.dimension || "",
     content: q?.content || "",
     referenceAnswer: q?.referenceAnswer || "",
-    followUpQuestion: q?.followUpQuestion || "",
+    followUps: (q?.followUps || []).map((f) => ({ ...f })),
+    rubric: q?.rubric
+      ? {
+          dimensions: q.rubric.dimensions.map((d) => ({
+            name: d.name,
+            maxScore: d.maxScore,
+            focus: d.focus,
+            pointsText: d.points.join("\n"),
+            levels: d.levels.map((l) => ({ ...l })),
+          })),
+          notes: q.rubric.notes,
+        }
+      : null,
   });
   questionFormRef.value?.clearValidate();
   questionOpen.value = true;
 }
 
+function collectRubric(): Rubric | null | false {
+  if (!editing.rubric) return null;
+  const dims = editing.rubric.dimensions;
+  if (!dims.length) return null;
+  const names = new Set<string>();
+  for (const d of dims) {
+    const name = d.name.trim();
+    if (!name) {
+      message.error("评分维度名称不能为空");
+      return false;
+    }
+    if (names.has(name)) {
+      message.error(`评分维度“${name}”重复`);
+      return false;
+    }
+    names.add(name);
+    if (!d.maxScore) {
+      message.error(`请填写“${name}”的满分`);
+      return false;
+    }
+  }
+  return {
+    dimensions: dims.map((d) => ({
+      name: d.name.trim(),
+      maxScore: d.maxScore,
+      focus: d.focus.trim(),
+      points: d.pointsText
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean),
+      levels: d.levels
+        .map((l) => ({ range: l.range.trim(), description: l.description.trim() }))
+        .filter((l) => l.range || l.description),
+    })),
+    notes: editing.rubric.notes.trim(),
+  };
+}
+
 async function saveQuestion() {
   await questionFormRef.value.validate();
+  const rubric = collectRubric();
+  if (rubric === false) return;
   const values = {
     dimension: editing.dimension.trim(),
     content: editing.content.trim(),
     referenceAnswer: editing.referenceAnswer.trim(),
-    followUpQuestion: editing.followUpQuestion.trim(),
+    followUps: editing.followUps
+      .map((f) => ({ content: f.content.trim(), intent: f.intent.trim() }))
+      .filter((f) => f.content),
+    rubric,
   };
   if (editingIndex.value === null) {
     questions.value.push(makeQuestion(values));
@@ -720,6 +985,11 @@ function validateQuestions() {
   const count = form.questionCount || 0;
   if (questions.value.length < count)
     return Promise.reject(`题库共 ${questions.value.length} 题，少于每人抽题数 ${count} 题`);
+  const withRubric = questions.value.filter((q) => q.rubric);
+  if (withRubric.length && withRubric.length < questions.value.length)
+    return Promise.reject("部分题目设置了评分标准、部分没有：请为所有题目设置评分标准，或全部清空");
+  const totals = new Set(withRubric.map((q) => rubricTotalOf(q.rubric)));
+  if (totals.size > 1) return Promise.reject("各题评分标准的满分不一致，请调整为相同满分");
   return Promise.resolve();
 }
 
@@ -735,6 +1005,7 @@ function fill(item: Record<string, any>) {
     questionCount: item.questionCount || 3,
     answerTime: item.answerTime || 120,
     followUp: !!item.followUp,
+    followUpCount: item.followUpCount || 0,
     totalScore: item.totalScore,
     passScore: item.passScore,
     assessmentCriteria: item.assessmentCriteria || "",
@@ -804,6 +1075,7 @@ async function save() {
     questionCount: form.question ? form.questionCount : undefined,
     answerTime: form.answerTime || 120,
     followUp: form.question && form.followUp,
+    followUpCount: form.followUpCount || 0,
     totalScore: form.totalScore,
     passScore: form.passScore,
     showResult: form.showResult,
@@ -818,7 +1090,9 @@ async function save() {
           dimension: q.dimension.trim() || undefined,
           content: q.content.trim(),
           referenceAnswer: q.referenceAnswer.trim() || undefined,
-          followUpQuestion: form.followUp ? q.followUpQuestion.trim() || undefined : undefined,
+          // 追问随题目保存；未启用追问时不提问，但不丢弃
+          followUps: q.followUps,
+          rubric: q.rubric || undefined,
         }))
       : [],
   };
@@ -903,6 +1177,41 @@ onMounted(load);
 .q-content {
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.edit-block {
+  margin-bottom: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--c-border-2);
+}
+
+.edit-block-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.edit-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.edit-row-no {
+  width: 20px;
+  padding-top: 5px;
+  color: var(--c-text-3);
+  text-align: right;
+}
+
+.dim-card {
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--c-border);
+  background: #fafbfc;
 }
 
 .q-sub {

@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 import system.assessment.defense.application.dto.*;
 import system.assessment.defense.infrastructure.common.CriteriaParser;
 import system.assessment.defense.application.dto.front.StudentAppointmentCmd;
+import system.assessment.defense.application.service.interview.AnswerRows;
 import system.assessment.defense.application.task.TaskQueue;
 import system.assessment.defense.application.task.TaskTypes;
 import system.assessment.defense.domain.entity.StudentSummary;
@@ -551,7 +552,10 @@ public class StudentAssessmentService {
                                                                      UserPO student,
                                                                      AssessmentSettingPO setting,
                                                                      String location) {
-        Map<Integer, StudentAssessmentQuestionAnswerPO> quesitonAnswerIdMap = questionAnswerService.listByAssessmentIdAndStudentId(record.getAssessmentId(), record.getStudentId()).stream()
+        List<StudentAssessmentQuestionAnswerPO> answerRows = questionAnswerService.listByAssessmentIdAndStudentId(record.getAssessmentId(), record.getStudentId());
+        List<StudentAssessmentQuestionAnswerPO> mainRows = AnswerRows.mains(answerRows);
+        Map<Integer, List<StudentAssessmentQuestionAnswerPO>> followRows = AnswerRows.followUps(answerRows);
+        Map<Integer, StudentAssessmentQuestionAnswerPO> quesitonAnswerIdMap = mainRows.stream()
                 .collect(Collectors.toMap(StudentAssessmentQuestionAnswerPO::getId, item -> item));
         String defenseResult = record.getDefenseResult();
         if (StringUtils.isNotBlank(defenseResult)) {
@@ -573,9 +577,7 @@ public class StudentAssessmentService {
             Map<Integer, AnswerEvaluationDTO> commentById = Optional.ofNullable(evaluation.getResult()).orElse(List.of())
                     .stream().filter(item -> item.getId() != null)
                     .collect(Collectors.toMap(AnswerEvaluationDTO::getId, item -> item, (a, b) -> a));
-            List<AnswerEvaluationDTO> result = quesitonAnswerIdMap.values().stream()
-                    .sorted(Comparator.comparing(StudentAssessmentQuestionAnswerPO::getSortIndex,
-                            Comparator.nullsLast(Comparator.naturalOrder())))
+            List<AnswerEvaluationDTO> result = mainRows.stream()
                     .map(answer -> {
                         AnswerEvaluationDTO comment = commentById.get(answer.getId());
                         return AnswerEvaluationDTO.builder()
@@ -583,10 +585,15 @@ public class StudentAssessmentService {
                                 .question(answer.getQuestion())
                                 .answer(answer.getAnswer())
                                 .answerFile(fileStorage.signedUrl(answer.getAnswerVoice()))
-                                .followQuestion(answer.getFollowQuestion())
-                                .followAnswer(answer.getFollowAnswer())
-                                .followAnswerFile(Optional.ofNullable(answer.getFollowAnswerVoice())
-                                        .map(fileStorage::signedUrl).orElse(null))
+                                .followUps(followRows.getOrDefault(answer.getId(), List.of()).stream()
+                                        .map(f -> FollowUpAnswerDTO.builder()
+                                                .question(f.getQuestion())
+                                                .answer(f.getAnswer())
+                                                .answerFile(Optional.ofNullable(f.getAnswerVoice())
+                                                        .map(fileStorage::signedUrl).orElse(null))
+                                                .build())
+                                        .toList())
+                                .dimensions(comment == null ? null : comment.getDimensions())
                                 .strength(comment == null ? null : comment.getStrength())
                                 .weakness(comment == null ? null : comment.getWeakness())
                                 .suggestion(comment == null ? null : comment.getSuggestion())
@@ -598,7 +605,7 @@ public class StudentAssessmentService {
                     .studentName(student.getName())
                     .passScore(setting.getPassScore())
                     .score(totalScore)
-                    .totalScore(setting.getTotalScore())
+                    .totalScore(Optional.ofNullable(rubricTotal(evaluation.getAnalysis())).orElse(setting.getTotalScore()))
                     .result(result)
                     .analysis(evaluation.getAnalysis())
                     .summary(evaluation.getSummary())
@@ -647,6 +654,17 @@ public class StudentAssessmentService {
         }
     }
 
+    /**
+     * 按题目评分标准评分时，满分由评分标准决定（各维度满分之和）；否则返回空，使用考核设置的总分
+     */
+    static Integer rubricTotal(AnalysisBO analysis) {
+        if (analysis == null || CollectionUtils.isEmpty(analysis.getAnalysis())
+                || analysis.getAnalysis().stream().anyMatch(a -> a.getMaxScore() == null)) {
+            return null;
+        }
+        return analysis.getAnalysis().stream().mapToInt(AnalysisDTO::getMaxScore).sum();
+    }
+
     static List<ReportDimensionDTO> buildDimensions(AnalysisBO analysis, TeacherReviewBO review, String criteria) {
         if (analysis == null || CollectionUtils.isEmpty(analysis.getAnalysis())) {
             return List.of();
@@ -664,8 +682,12 @@ public class StudentAssessmentService {
                             .name(item.getName())
                             .aiScore(ai)
                             .score(reviewed.getOrDefault(item.getName(), ai))
-                            .maxScore(CriteriaParser.maxScoreOf(maxScores, item.getName()))
+                            .maxScore(Optional.ofNullable(item.getMaxScore())
+                                    .orElseGet(() -> CriteriaParser.maxScoreOf(maxScores, item.getName())))
                             .description(item.getDescription())
+                            .level(item.getLevel())
+                            .hitPoints(item.getHitPoints())
+                            .missedPoints(item.getMissedPoints())
                             .build();
                 })
                 .toList();

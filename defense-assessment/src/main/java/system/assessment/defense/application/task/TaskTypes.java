@@ -8,14 +8,9 @@ public final class TaskTypes {
     public static final String ASR_DEFENSE = "ASR_DEFENSE";
 
     /**
-     * 转写主问题回答，bizId = student_assessment_question_answer.id
+     * 转写主问题或追问的回答（两者各占一行），bizId = student_assessment_question_answer.id
      */
     public static final String ASR_ANSWER = "ASR_ANSWER";
-
-    /**
-     * 转写追问回答，bizId = student_assessment_question_answer.id
-     */
-    public static final String ASR_FOLLOW_UP = "ASR_FOLLOW_UP";
 
     /**
      * 面试整体评分，bizId = student_assessment_record.id

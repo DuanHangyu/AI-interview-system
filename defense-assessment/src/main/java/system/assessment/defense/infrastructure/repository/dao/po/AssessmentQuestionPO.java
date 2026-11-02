@@ -33,16 +33,16 @@ public class AssessmentQuestionPO {
     @Schema(description = "参考答案 / 评分要点，仅供 AI 评分使用，不展示给学生")
     private String referenceAnswer;
 
-    @Schema(description = "预制追问，为空表示该题不追问")
-    private String followUpQuestion;
+    @Schema(description = "本题评分标准 JSON（QuestionRubric），为空时使用考核的整体考核标准")
+    private String rubric;
+
+    @Schema(description = "预制追问 JSON 数组（FollowUpItemDTO，含播报音频 key），为空表示该题不追问")
+    private String followUps;
 
     private Integer sort;
 
     @Schema(description = "题目播报音频的存储 key，内容变更后清空并重新生成")
     private String audioKey;
-
-    @Schema(description = "追问播报音频的存储 key")
-    private String followUpAudioKey;
 
     private Boolean deleted;
 

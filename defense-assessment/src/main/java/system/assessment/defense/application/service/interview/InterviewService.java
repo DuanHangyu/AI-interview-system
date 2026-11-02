@@ -1,7 +1,6 @@
 package system.assessment.defense.application.service.interview;
 
 import com.baomidou.mybatisplus.core.toolkit.Wrappers;
-import com.baomidou.mybatisplus.core.toolkit.support.SFunction;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -10,6 +9,7 @@ import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
+import system.assessment.defense.application.dto.FollowUpItemDTO;
 import system.assessment.defense.application.dto.interview.InterviewStateDTO;
 import system.assessment.defense.application.dto.interview.InterviewStateDTO.CurrentQuestion;
 import system.assessment.defense.application.task.TaskQueue;
@@ -34,8 +34,8 @@ import system.assessment.defense.infrastructure.storage.FileStorage;
 import java.io.IOException;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
-import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Random;
@@ -131,36 +131,33 @@ public class InterviewService {
         return state(studentId, assessmentId);
     }
 
-    public InterviewStateDTO uploadAnswer(Integer studentId, Integer assessmentId, Integer index, boolean followUp,
+    /**
+     * @param followIndex 0 表示主问题，1、2… 表示该题的第几个追问
+     */
+    public InterviewStateDTO uploadAnswer(Integer studentId, Integer assessmentId, Integer index, int followIndex,
                                           MultipartFile audio) {
         AssessmentSettingPO setting = loadSetting(assessmentId);
         StudentAssessmentRecordPO record = startedRecord(studentId, assessmentId);
         List<StudentAssessmentQuestionAnswerPO> answers = listAnswers(studentId, assessmentId);
-        StudentAssessmentQuestionAnswerPO answer = answers.stream()
-                .filter(a -> Objects.equals(a.getSortIndex(), index))
-                .findFirst()
-                .orElseThrow(() -> new BusinessException(400, "题目不存在"));
+        StudentAssessmentQuestionAnswerPO answer = findRow(answers, index, followIndex);
         InterviewStateDTO state = buildState(setting, record, answers);
-        boolean alreadyAnswered = followUp ? answer.getFollowAnswerVoice() != null : answer.getAnswerVoice() != null;
-        if (alreadyAnswered) {
+        if (answer.getAnswerVoice() != null) {
             // 前端重试导致的重复上传，直接返回最新状态
             return state;
         }
-        CurrentQuestion current = state.getCurrent();
-        if (current == null || !Objects.equals(current.getIndex(), index) || !Objects.equals(current.getFollowUp(), followUp)) {
+        if (!isCurrent(state.getCurrent(), index, followIndex)) {
             throw new BusinessException(409, "请按顺序作答，请刷新页面后继续");
         }
         byte[] wav = readAudio(audio);
         String key = fileStorage.put("answers", "answer.wav", wav, "audio/wav");
-        SFunction<StudentAssessmentQuestionAnswerPO, String> voiceColumn = followUp
-                ? StudentAssessmentQuestionAnswerPO::getFollowAnswerVoice : StudentAssessmentQuestionAnswerPO::getAnswerVoice;
         inTransaction(() -> {
             boolean updated = answerService.update(Wrappers.lambdaUpdate(StudentAssessmentQuestionAnswerPO.class)
-                    .set(voiceColumn, key)
+                    .set(StudentAssessmentQuestionAnswerPO::getAnswerVoice, key)
                     .eq(StudentAssessmentQuestionAnswerPO::getId, answer.getId())
-                    .isNull(voiceColumn));
+                    .isNull(StudentAssessmentQuestionAnswerPO::getAnswerVoice));
             if (updated) {
-                taskQueue.enqueue(followUp ? TaskTypes.ASR_FOLLOW_UP : TaskTypes.ASR_ANSWER, answer.getId());
+                // 主问题和追问各占一行，转写任务相同
+                taskQueue.enqueue(TaskTypes.ASR_ANSWER, answer.getId());
             }
         });
         return state(studentId, assessmentId);
@@ -197,23 +194,44 @@ public class InterviewService {
     /**
      * 当前题目的播报音频。只允许获取正在作答的那一题，避免提前获取后续题目。
      */
-    public byte[] questionAudio(Integer studentId, Integer assessmentId, Integer index, boolean followUp) {
+    public byte[] questionAudio(Integer studentId, Integer assessmentId, Integer index, int followIndex) {
         InterviewStateDTO state = state(studentId, assessmentId);
         CurrentQuestion current = state.getCurrent();
-        if (current == null || !Objects.equals(current.getIndex(), index) || !Objects.equals(current.getFollowUp(), followUp)) {
+        if (!isCurrent(current, index, followIndex)) {
             throw new BusinessException(409, "只能获取当前题目的语音");
         }
-        StudentAssessmentQuestionAnswerPO answer = listAnswers(studentId, assessmentId).stream()
+        StudentAssessmentQuestionAnswerPO answer = findRow(listAnswers(studentId, assessmentId), index, followIndex);
+        return followIndex > 0
+                ? questionBankService.followUpAudio(answer.getQuestionId(), current.getContent())
+                : questionBankService.questionAudio(answer.getQuestionId(), current.getContent());
+    }
+
+    private static boolean isCurrent(CurrentQuestion current, Integer index, int followIndex) {
+        return current != null && Objects.equals(current.getIndex(), index)
+                && Objects.equals(current.getFollowIndex(), followIndex);
+    }
+
+    private static StudentAssessmentQuestionAnswerPO findRow(List<StudentAssessmentQuestionAnswerPO> answers,
+                                                             Integer index, int followIndex) {
+        StudentAssessmentQuestionAnswerPO main = AnswerRows.mains(answers).stream()
                 .filter(a -> Objects.equals(a.getSortIndex(), index))
                 .findFirst()
                 .orElseThrow(() -> new BusinessException(400, "题目不存在"));
-        return questionBankService.questionAudio(answer.getQuestionId(), followUp, current.getContent());
+        if (followIndex <= 0) {
+            return main;
+        }
+        return AnswerRows.followUps(answers).getOrDefault(main.getId(), List.of()).stream()
+                .filter(f -> Objects.equals(f.getFollowIndex(), followIndex))
+                .findFirst()
+                .orElseThrow(() -> new BusinessException(400, "追问不存在"));
     }
 
     static InterviewStateDTO buildState(AssessmentSettingPO setting, StudentAssessmentRecordPO record,
                                         List<StudentAssessmentQuestionAnswerPO> answers) {
         boolean defenseEnabled = isTrue(setting.getDefense());
         boolean questionEnabled = isTrue(setting.getQuestion());
+        List<StudentAssessmentQuestionAnswerPO> mains = AnswerRows.mains(answers);
+        Map<Integer, List<StudentAssessmentQuestionAnswerPO>> followUps = AnswerRows.followUps(answers);
         InterviewStateDTO state = InterviewStateDTO.builder()
                 .assessmentId(setting.getId())
                 .theme(setting.getTheme())
@@ -223,7 +241,7 @@ public class InterviewService {
                 .duration(setting.getDuration())
                 .answerTime(setting.getAnswerTime())
                 .defenseDone(record != null && record.getEndDefenseTime() != null && isStarted(record))
-                .total(answers.size())
+                .total(mains.size())
                 .answeredCount(0)
                 .build();
         if (!isStarted(record)) {
@@ -232,18 +250,24 @@ public class InterviewService {
         }
         if (Objects.equals(record.getState(), RECORD_DONE) || Objects.equals(record.getState(), RECORD_ANALYZING)) {
             state.setStatus(InterviewStateDTO.SUBMITTED);
-            state.setAnsweredCount(answers.size());
+            state.setAnsweredCount(mains.size());
             return state;
         }
         CurrentQuestion current = null;
         int answered = 0;
-        for (StudentAssessmentQuestionAnswerPO answer : answers) {
+        for (StudentAssessmentQuestionAnswerPO answer : mains) {
+            List<StudentAssessmentQuestionAnswerPO> follows = followUps.getOrDefault(answer.getId(), List.of());
             if (answer.getAnswerVoice() == null) {
-                current = new CurrentQuestion(answer.getSortIndex(), false, answer.getQuestion());
+                current = new CurrentQuestion(answer.getSortIndex(), false, 0, follows.size(), answer.getQuestion());
                 break;
             }
-            if (StringUtils.isNotBlank(answer.getFollowQuestion()) && answer.getFollowAnswerVoice() == null) {
-                current = new CurrentQuestion(answer.getSortIndex(), true, answer.getFollowQuestion());
+            StudentAssessmentQuestionAnswerPO pending = follows.stream()
+                    .filter(f -> f.getAnswerVoice() == null)
+                    .findFirst()
+                    .orElse(null);
+            if (pending != null) {
+                current = new CurrentQuestion(answer.getSortIndex(), true, pending.getFollowIndex(), follows.size(),
+                        pending.getQuestion());
                 break;
             }
             answered++;
@@ -294,7 +318,7 @@ public class InterviewService {
             boolean askFollowUp = isTrue(setting.getFollowUp());
             for (int i = 0; i < drawn.size(); i++) {
                 AssessmentQuestionPO q = drawn.get(i);
-                answerService.save(StudentAssessmentQuestionAnswerPO.builder()
+                StudentAssessmentQuestionAnswerPO main = StudentAssessmentQuestionAnswerPO.builder()
                         .assessmentId(setting.getId())
                         .studentId(studentId)
                         .questionId(q.getId())
@@ -302,9 +326,27 @@ public class InterviewService {
                         .dimension(q.getDimension())
                         .question(q.getContent())
                         .referenceAnswer(q.getReferenceAnswer())
-                        .followQuestion(askFollowUp ? StringUtils.trimToNull(q.getFollowUpQuestion()) : null)
+                        .rubric(q.getRubric())
                         .createTime(now)
-                        .build());
+                        .build();
+                answerService.save(main);
+                if (!askFollowUp) {
+                    continue;
+                }
+                List<FollowUpItemDTO> picked = QuestionDrawer.pickFollowUps(
+                        QuestionBankService.parseFollowUps(q.getFollowUps()), setting.getFollowUpCount(), random);
+                for (int k = 0; k < picked.size(); k++) {
+                    answerService.save(StudentAssessmentQuestionAnswerPO.builder()
+                            .assessmentId(setting.getId())
+                            .studentId(studentId)
+                            .questionId(q.getId())
+                            .parentId(main.getId())
+                            .followIndex(k + 1)
+                            .followIntent(picked.get(k).getIntent())
+                            .question(picked.get(k).getContent())
+                            .createTime(now)
+                            .build());
+                }
             }
             log.info("interview started, studentId:{}, assessmentId:{}, drawn:{}/{}", studentId, setting.getId(),
                     drawn.size(), bank.size());
@@ -374,10 +416,7 @@ public class InterviewService {
     }
 
     private List<StudentAssessmentQuestionAnswerPO> listAnswers(Integer studentId, Integer assessmentId) {
-        return answerService.listByAssessmentIdAndStudentId(assessmentId, studentId).stream()
-                .sorted(Comparator.comparing(StudentAssessmentQuestionAnswerPO::getSortIndex,
-                        Comparator.nullsLast(Comparator.naturalOrder())))
-                .toList();
+        return answerService.listByAssessmentIdAndStudentId(assessmentId, studentId);
     }
 
     private AssessmentSettingPO loadSetting(Integer assessmentId) {

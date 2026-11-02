@@ -116,8 +116,13 @@
         </template>
         <template v-else-if="state?.current">
           <div class="panel-label">
-            {{ state.current.followUp ? "追问" : "问题" }} {{ state.current.index }}
+            问题 {{ state.current.index }}
             <span class="muted">/ {{ state.total }}</span>
+            <template v-if="state.current.followUp">
+              · 追问<template v-if="state.current.followTotal > 1">
+                {{ state.current.followIndex }}<span class="muted"> / {{ state.current.followTotal }}</span></template
+              >
+            </template>
           </div>
           <div class="question-text md" v-html="renderMarkdown(state.current.content)"></div>
         </template>
@@ -645,12 +650,12 @@ function speakText(text: string): Promise<void> {
   });
 }
 
-async function fetchQuestionAudio(index: number, followUp: boolean): Promise<Blob> {
+async function fetchQuestionAudio(index: number, followIndex: number): Promise<Blob> {
   const timeout = new Promise<never>((_, reject) =>
     setTimeout(() => reject(new Error("audio timeout")), AUDIO_FETCH_TIMEOUT)
   );
   const res: any = await Promise.race([
-    getQuestionAudio(assessmentId.value, index, followUp),
+    getQuestionAudio(assessmentId.value, index, followIndex),
     timeout,
   ]);
   const blob: Blob = res?.data;
@@ -664,14 +669,14 @@ async function fetchQuestionAudio(index: number, followUp: boolean): Promise<Blo
 async function askCurrent() {
   const current = state.value?.current;
   if (!current) return;
-  const slotKey = `${current.index}-${current.followUp}`;
+  const slotKey = `${current.index}-${current.followIndex || 0}`;
   if (askedSlotKey === slotKey && questionPhase.value !== "idle") return;
   askedSlotKey = slotKey;
   questionPhase.value = "playing";
   countdownTotal.value = state.value?.answerTime || 0;
   countdown.value = countdownTotal.value;
   try {
-    const blob = await fetchQuestionAudio(current.index, current.followUp);
+    const blob = await fetchQuestionAudio(current.index, current.followIndex || 0);
     if (askedSlotKey !== slotKey || questionPhase.value !== "playing") return;
     await playBlob(blob);
   } catch (audioError) {
@@ -710,24 +715,24 @@ async function finishAnswer() {
   if (recorder.peakLevel.value < SILENCE_PEAK) {
     showSilentRecording(
       () => { questionPhase.value = "idle"; startAnswer(); },
-      () => sendAnswer(current.index, current.followUp, audio)
+      () => sendAnswer(current.index, current.followIndex || 0, audio)
     );
     return;
   }
-  await sendAnswer(current.index, current.followUp, audio);
+  await sendAnswer(current.index, current.followIndex || 0, audio);
 }
 
-async function sendAnswer(index: number, followUp: boolean, audio: Blob) {
+async function sendAnswer(index: number, followIndex: number, audio: Blob) {
   busy.value = true;
   try {
     const res = await uploadWithRetry(() =>
-      uploadAnswerAudio(assessmentId.value, index, followUp, audio)
+      uploadAnswerAudio(assessmentId.value, index, followIndex, audio)
     );
     blocking.value = null;
     questionPhase.value = "idle";
     applyState(res.data);
   } catch (error) {
-    const retry = { label: "重试上传", primary: true, run: () => sendAnswer(index, followUp, audio) };
+    const retry = { label: "重试上传", primary: true, run: () => sendAnswer(index, followIndex, audio) };
     const redo = {
       label: "重新回答",
       run: () => {

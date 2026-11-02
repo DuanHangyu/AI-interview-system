@@ -6,6 +6,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 /**
  * @USER taoHouChao
  * @DATE 16:19 2025/6/23
@@ -29,14 +31,11 @@ public class AnswerEvaluationDTO {
     @Schema(description = "答案文件")
     private String answerFile;
 
-    @Schema(description = "追问问题")
-    private String followQuestion;
+    @Schema(description = "追问及回答，按提问顺序")
+    private List<FollowUpAnswerDTO> followUps;
 
-    @Schema(description = "追问问题回答")
-    private String followAnswer;
-
-    @Schema(description = "追问问题回答文件")
-    private String followAnswerFile;
+    @Schema(description = "按本题评分标准的逐维度评分（未设置评分标准时为空）")
+    private List<QuestionDimensionDTO> dimensions;
 
     @Schema(description = "本题回答的优势")
     private String strength;

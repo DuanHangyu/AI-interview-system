@@ -63,6 +63,12 @@ public class InterviewStateDTO {
         @Schema(description = "是否为追问")
         private Boolean followUp;
 
+        @Schema(description = "追问序号，从 1 开始；主问题为 0")
+        private Integer followIndex;
+
+        @Schema(description = "本题的追问总数")
+        private Integer followTotal;
+
         private String content;
     }
 }

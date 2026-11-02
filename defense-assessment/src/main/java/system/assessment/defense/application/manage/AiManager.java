@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 import system.assessment.defense.application.dto.AssessmentEvaluationDTO;
+import system.assessment.defense.application.dto.FollowUpItemDTO;
 import system.assessment.defense.application.dto.QuestionItemDTO;
 
 import java.util.ArrayList;
@@ -171,6 +172,73 @@ public class AiManager {
             }
             """;
 
+    /**
+     * 按题目评分标准评分的输出结构；%s 处为答辩点评（没有答辩环节时为空）。
+     */
+    private static final String RUBRIC_EVALUATION_SCHEMA = """
+            {
+              "type": "object",
+              "required": ["result", "analysis", "summary"%s],
+              "additionalProperties": false,
+              "properties": {
+                "result": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["id", "dimensions", "strength", "weakness", "suggestion"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "id": {"type": "integer", "description": "问题Id"},
+                      "dimensions": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["name", "level", "score", "hitPoints", "missedPoints", "comment"],
+                          "additionalProperties": false,
+                          "properties": {
+                            "name": {"type": "string", "description": "评分维度名称，与本题评分标准一致"},
+                            "level": {"type": "string", "description": "所在分档的分数段，如 4-5分"},
+                            "score": {"type": "integer", "description": "该维度得分"},
+                            "hitPoints": {"type": "array", "items": {"type": "string"}},
+                            "missedPoints": {"type": "array", "items": {"type": "string"}},
+                            "comment": {"type": "string", "description": "给分依据"}
+                          }
+                        }
+                      },
+                      "strength": {"type": "string"},
+                      "weakness": {"type": "string"},
+                      "suggestion": {"type": "string"}
+                    }
+                  }
+                },%s
+                "analysis": {
+                  "type": "object",
+                  "required": ["suggestions", "strengths", "weaknesses"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "suggestions": {"type": "array", "items": {"type": "string"}},
+                    "strengths": {"type": "array", "items": {"type": "string"}},
+                    "weaknesses": {"type": "array", "items": {"type": "string"}}
+                  }
+                },
+                "summary": {"type": "string", "description": "总结"}
+              }
+            }
+            """;
+
+    private static final String RUBRIC_DEFENSE_SCHEMA = """
+
+                "defense": {
+                  "type": "object",
+                  "required": ["strength", "weakness", "suggestion"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "strength": {"type": "string"},
+                    "weakness": {"type": "string"},
+                    "suggestion": {"type": "string"}
+                  }
+                },""";
+
     private final OpenAiManager openAiManager;
 
     private static final String QUESTION_DRAFT_SYSTEM_PROMPT = """
@@ -228,7 +296,8 @@ public class AiManager {
             item.setDimension(StringUtils.trimToNull(q.getStr("dimension")));
             item.setContent(content);
             item.setReferenceAnswer(textOf(q.get("referenceAnswer")));
-            item.setFollowUpQuestion(StringUtils.trimToNull(q.getStr("followUpQuestion")));
+            String followUp = StringUtils.trimToNull(q.getStr("followUpQuestion"));
+            item.setFollowUps(followUp == null ? List.of() : List.of(FollowUpItemDTO.builder().content(followUp).build()));
             result.add(item);
         }
         return result;
@@ -259,6 +328,27 @@ public class AiManager {
         AssessmentEvaluationDTO results = JSONUtil.toBean(stripCodeFence(resultText), AssessmentEvaluationDTO.class);
         results.verifyIntegrity();
         return results;
+    }
+
+    /**
+     * 按题目评分标准评分：模型只给逐题逐维度的分数和点评，总分与维度汇总由调用方计算并校验。
+     */
+    public AssessmentEvaluationDTO rubricAnalysis(String systemPrompt, String prompt, String materialContext,
+                                                  boolean withDefense) {
+        String promptWithMaterial = """
+                【考试材料上下文】
+                %s
+
+                %s
+                """.formatted(StringUtils.defaultIfBlank(materialContext, "无"), prompt);
+        String schemaJson = RUBRIC_EVALUATION_SCHEMA.formatted(withDefense ? ", \"defense\"" : "",
+                withDefense ? RUBRIC_DEFENSE_SCHEMA : "");
+        long start = System.currentTimeMillis();
+        String resultText = openAiManager.chatCompletionWithSchema(openAiManager.getTextModel(),
+                systemPrompt, promptWithMaterial, "rubric_evaluation", schemaJson);
+        log.info("rubricAnalysis defense:{}, cost:{}ms, length:{}", withDefense,
+                System.currentTimeMillis() - start, resultText.length());
+        return JSONUtil.toBean(stripCodeFence(resultText), AssessmentEvaluationDTO.class);
     }
 
     /**

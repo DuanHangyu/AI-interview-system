@@ -39,6 +39,7 @@ CREATE TABLE `assessment` (
   `question_count` INT DEFAULT NULL,
   `answer_time` INT DEFAULT NULL,
   `follow_up` TINYINT(1) DEFAULT 0,
+  `follow_up_count` INT DEFAULT NULL COMMENT '每道题的追问个数，少于题目追问数时随机抽取',
   `follow_up_prompt` TEXT,
   `follow_up_standards` TEXT,
   `assessment_files` TEXT,
@@ -123,9 +124,13 @@ CREATE TABLE `student_assessment_question_answer` (
   `assessment_id` INT DEFAULT NULL,
   `student_id` INT DEFAULT NULL,
   `question_id` INT DEFAULT NULL COMMENT '抽中的题库题目 id',
+  `parent_id` INT DEFAULT NULL COMMENT '追问所属的主问题行 id，主问题为空',
+  `follow_index` INT DEFAULT NULL COMMENT '追问序号，从 1 开始',
+  `follow_intent` TEXT COMMENT '追问的考察意图快照',
   `sort_index` INT DEFAULT NULL COMMENT '本场面试中的题序，从 1 开始',
   `dimension` VARCHAR(255) DEFAULT NULL,
   `reference_answer` TEXT COMMENT '抽题时的参考答案快照',
+  `rubric` TEXT COMMENT '抽题时的评分标准快照',
   `question` TEXT,
   `answer` TEXT,
   `answer_voice` VARCHAR(1000) DEFAULT NULL,
@@ -135,6 +140,7 @@ CREATE TABLE `student_assessment_question_answer` (
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_saqa_student_assessment_sort` (`student_id`, `assessment_id`, `sort_index`),
+  UNIQUE KEY `uk_saqa_parent_follow` (`parent_id`, `follow_index`),
   KEY `idx_saqa_assessment_id` (`assessment_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -172,6 +178,8 @@ CREATE TABLE `assessment_question` (
   `dimension` VARCHAR(255) DEFAULT NULL COMMENT '考核维度，用于均衡抽题',
   `content` TEXT NOT NULL,
   `reference_answer` TEXT COMMENT '参考答案 / 评分要点，仅用于 AI 评分',
+  `rubric` TEXT COMMENT '本题评分标准 JSON：维度、满分、考察点、分档表现、评分说明',
+  `follow_ups` TEXT COMMENT '追问列表 JSON：[{content, intent, audioKey}]',
   `follow_up_question` TEXT COMMENT '预制追问，为空表示不追问',
   `sort` INT NOT NULL DEFAULT 0,
   `audio_key` VARCHAR(500) DEFAULT NULL COMMENT '题目播报音频存储 key',

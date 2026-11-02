@@ -57,4 +57,23 @@ public final class QuestionDrawer {
         }
         return picked;
     }
+
+    /**
+     * 抽取追问：count 为空、不大于 0 或不少于追问总数时全部提问；否则随机抽取 count 个，保持教师设定的先后顺序
+     * （追问通常是递进的）。
+     */
+    public static <T> List<T> pickFollowUps(List<T> followUps, Integer count, Random random) {
+        if (followUps == null || followUps.isEmpty()) {
+            return List.of();
+        }
+        if (count == null || count <= 0 || count >= followUps.size()) {
+            return List.copyOf(followUps);
+        }
+        List<Integer> indexes = new ArrayList<>();
+        for (int i = 0; i < followUps.size(); i++) {
+            indexes.add(i);
+        }
+        Collections.shuffle(indexes, random);
+        return indexes.subList(0, count).stream().sorted().map(followUps::get).toList();
+    }
 }

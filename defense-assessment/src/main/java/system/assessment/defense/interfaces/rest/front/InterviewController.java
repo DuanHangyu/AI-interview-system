@@ -53,8 +53,10 @@ public class InterviewController {
     public InterviewStateDTO answer(@RequestParam("assessmentId") Integer assessmentId,
                                     @RequestParam("index") Integer index,
                                     @RequestParam(value = "followUp", defaultValue = "false") boolean followUp,
+                                    @RequestParam(value = "followIndex", required = false) Integer followIndex,
                                     @RequestParam("audio") MultipartFile audio) {
-        return interviewService.uploadAnswer(StpUtil.getLoginIdAsInt(), assessmentId, index, followUp, audio);
+        return interviewService.uploadAnswer(StpUtil.getLoginIdAsInt(), assessmentId, index,
+                followIndex(followUp, followIndex), audio);
     }
 
     @PostMapping("/submit")
@@ -68,11 +70,23 @@ public class InterviewController {
     public void questionAudio(@RequestParam("assessmentId") Integer assessmentId,
                               @RequestParam("index") Integer index,
                               @RequestParam(value = "followUp", defaultValue = "false") boolean followUp,
+                              @RequestParam(value = "followIndex", required = false) Integer followIndex,
                               HttpServletResponse response) throws IOException {
-        byte[] audio = interviewService.questionAudio(StpUtil.getLoginIdAsInt(), assessmentId, index, followUp);
+        byte[] audio = interviewService.questionAudio(StpUtil.getLoginIdAsInt(), assessmentId, index,
+                followIndex(followUp, followIndex));
         response.setContentType("audio/wav");
         response.setHeader("Cache-Control", "private, max-age=600");
         response.setContentLength(audio.length);
         response.getOutputStream().write(audio);
+    }
+
+    /**
+     * followIndex：0 主问题，1、2… 第几个追问；兼容只传 followUp=true 的旧前端（视为第 1 个追问）
+     */
+    private static int followIndex(boolean followUp, Integer followIndex) {
+        if (followIndex != null) {
+            return Math.max(0, followIndex);
+        }
+        return followUp ? 1 : 0;
     }
 }
