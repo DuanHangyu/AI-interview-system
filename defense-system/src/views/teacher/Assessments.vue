@@ -42,8 +42,8 @@
             <a class="font-medium" @click="router.push(`/assessments/${record.id}/edit`)">{{ record.theme }}</a>
           </template>
           <template v-else-if="column.key === 'flow'">
-            <Tag v-if="record.defense" :bordered="false" color="blue">答辩 {{ minutes(record.duration) }}</Tag>
-            <Tag v-if="record.question" :bordered="false" color="cyan">问答 {{ record.questionCount || 0 }} 题</Tag>
+            <Tag v-if="record.defense" :bordered="false" color="red">答辩 {{ minutes(record.duration) }}</Tag>
+            <Tag v-if="record.question" :bordered="false" color="gold">问答 {{ record.questionCount || 0 }} 题</Tag>
             <Tag v-if="record.question && record.followUp" :bordered="false">含追问</Tag>
           </template>
           <template v-else-if="column.key === 'bank'">

@@ -2,7 +2,8 @@
   <div class="room">
     <header class="room-header">
       <div class="room-brand">
-        <span class="room-mark">AI</span>
+        <img :src="emblemRed" :alt="BRAND.school" class="room-mark" />
+        <span class="room-college">{{ BRAND.college }}</span>
         <span class="room-theme" :title="state?.theme">{{ state?.theme || "AI 面试" }}</span>
       </div>
       <div class="room-steps" v-if="state && stage !== 'done'">
@@ -241,6 +242,8 @@ import {
   uploadDefenseAudio,
 } from "@/api/interview";
 import { SILENCE_PEAK, useAudioRecorder } from "@/composables/useAudioRecorder";
+import { BRAND } from "@/config/brand";
+import emblemRed from "@/assets/brand/emblem-red.svg";
 
 type Stage = "loading" | "intro" | "defense" | "drawing" | "question" | "submitting" | "done";
 type QuestionPhase = "idle" | "playing" | "recording" | "uploading";
@@ -908,10 +911,12 @@ function onDeviceSelect(value: unknown) {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  height: 60px;
+  height: 64px;
   padding: 0 24px;
   background: var(--c-surface);
+  border-top: 3px solid var(--c-primary);
   border-bottom: 1px solid var(--c-border);
+  box-shadow: var(--shadow-1);
 }
 
 .room-brand {
@@ -923,16 +928,18 @@ function onDeviceSelect(value: unknown) {
 
 .room-mark {
   flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  background: var(--c-primary);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
+  width: 32px;
+  height: 32px;
+}
+
+.room-college {
+  flex-shrink: 0;
+  padding-right: 12px;
+  border-right: 1px solid var(--c-border);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--c-primary-deep);
+  letter-spacing: 1px;
 }
 
 .room-theme {
@@ -1334,7 +1341,7 @@ function onDeviceSelect(value: unknown) {
 @keyframes flip {
   to {
     transform: translateY(-10px);
-    box-shadow: 0 8px 20px rgba(51, 112, 255, 0.15);
+    box-shadow: 0 8px 20px rgba(195, 25, 42, 0.15);
   }
 }
 
@@ -1347,6 +1354,12 @@ function onDeviceSelect(value: unknown) {
   }
   .room-header {
     grid-template-columns: 1fr auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .room-college {
+    display: none;
   }
 }
 </style>

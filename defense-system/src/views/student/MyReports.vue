@@ -14,6 +14,7 @@
         :data-source="list"
         :loading="loading"
         row-key="id"
+        :scroll="{ x: 640 }"
         :pagination="{
           current: page,
           pageSize: size,

@@ -1,12 +1,11 @@
 <template>
   <div class="page">
-    <div class="page-head">
-      <div>
-        <h1 class="page-title">我的面试</h1>
-        <p class="page-desc">参加已安排的面试，或预约需要选择时间的面试</p>
-      </div>
-      <Button @click="refresh"><ReloadOutlined /> 刷新</Button>
-    </div>
+    <WelcomeBanner suffix="同学">
+      请在规定时间内完成面试；需要预约的面试请先选择时段。祝你面试顺利！
+      <template #actions>
+        <Button @click="refresh"><ReloadOutlined /> 刷新</Button>
+      </template>
+    </WelcomeBanner>
 
     <div class="stats">
       <button
@@ -17,8 +16,11 @@
         :class="{ 'is-active': tab === s.key }"
         @click="onStat(s.key)"
       >
-        <div class="stat-label">{{ s.label }}</div>
-        <div class="stat-value num">{{ s.value }}</div>
+        <span class="stat-icon" :class="s.tone"><component :is="s.icon" /></span>
+        <span>
+          <span class="stat-label">{{ s.label }}</span>
+          <span class="stat-value num">{{ s.value }}</span>
+        </span>
       </button>
     </div>
 
@@ -85,10 +87,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, markRaw, onMounted, onUnmounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { Button, Empty, Pagination, Popconfirm, Spin, TabPane, Tabs, Tag, message } from "ant-design-vue";
-import { CalendarOutlined, LoadingOutlined, ReloadOutlined } from "@ant-design/icons-vue";
+import {
+  CalendarOutlined,
+  CheckCircleOutlined,
+  FieldTimeOutlined,
+  HourglassOutlined,
+  LoadingOutlined,
+  ReloadOutlined,
+  ScheduleOutlined,
+} from "@ant-design/icons-vue";
 import dayjs, { Dayjs } from "dayjs";
 import {
   cancelAppointment,
@@ -99,6 +109,7 @@ import {
   getMachineTime,
 } from "@/api/studentAssessment";
 import AppointmentModal from "./components/AppointmentModal.vue";
+import WelcomeBanner from "@/components/WelcomeBanner.vue";
 
 type TabKey = "todo" | "appoint" | "analysis";
 
@@ -116,11 +127,18 @@ const appointOpen = ref(false);
 const appointItem = ref<Record<string, any> | null>(null);
 let timer: number | undefined;
 
+const icons = {
+  todo: markRaw(FieldTimeOutlined),
+  appoint: markRaw(ScheduleOutlined),
+  analysis: markRaw(HourglassOutlined),
+  done: markRaw(CheckCircleOutlined),
+};
+
 const statCards = computed(() => [
-  { key: "todo", label: "待参加", value: statLoaded.value ? stat.value.todo ?? 0 : "—" },
-  { key: "appoint", label: "待预约", value: statLoaded.value ? stat.value.toAppoint ?? 0 : "—" },
-  { key: "analysis", label: "评分中", value: statLoaded.value ? stat.value.analysis ?? 0 : "—" },
-  { key: "done", label: "已完成", value: statLoaded.value ? stat.value.done ?? 0 : "—" },
+  { key: "todo", label: "待参加", icon: icons.todo, tone: "", value: statLoaded.value ? stat.value.todo ?? 0 : "—" },
+  { key: "appoint", label: "待预约", icon: icons.appoint, tone: "is-gold", value: statLoaded.value ? stat.value.toAppoint ?? 0 : "—" },
+  { key: "analysis", label: "评分中", icon: icons.analysis, tone: "is-gray", value: statLoaded.value ? stat.value.analysis ?? 0 : "—" },
+  { key: "done", label: "已完成", icon: icons.done, tone: "is-green", value: statLoaded.value ? stat.value.done ?? 0 : "—" },
 ]);
 
 const emptyText = computed(
@@ -251,26 +269,65 @@ onUnmounted(() => window.clearInterval(timer));
 }
 
 .stat {
-  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
 
 .stat:hover,
 .stat.is-active {
   border-color: var(--c-primary);
+  box-shadow: var(--shadow-2);
+}
+
+.stat:hover {
+  transform: translateY(-1px);
+}
+
+.stat-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  font-size: 20px;
+  color: var(--c-primary);
+  background: var(--c-primary-soft);
+}
+
+.stat-icon.is-gold {
+  color: #a87a35;
+  background: var(--c-gold-soft);
+}
+
+.stat-icon.is-gray {
+  color: var(--c-text-2);
+  background: #f1eeea;
+}
+
+.stat-icon.is-green {
+  color: var(--c-success);
+  background: #e9f7ee;
 }
 
 .stat-label {
+  display: block;
   font-size: 13px;
   color: var(--c-text-3);
 }
 
 .stat-value {
-  margin-top: 6px;
+  display: block;
+  margin-top: 2px;
   font-size: 24px;
   font-weight: 600;
+  line-height: 32px;
   color: var(--c-text);
 }
 

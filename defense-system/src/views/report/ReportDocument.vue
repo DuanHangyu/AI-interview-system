@@ -3,8 +3,8 @@
     <!-- 报告抬头 -->
     <header class="rp-head">
       <div class="rp-brand">
-        <span class="rp-mark">AI</span>
-        <span>AI 面试评估</span>
+        <img :src="logoRed" :alt="BRAND.school + BRAND.college" class="rp-logo" />
+        <span class="rp-product">{{ BRAND.product }}</span>
       </div>
       <div class="rp-meta">
         <span>报告编号 {{ reportNo }}</span>
@@ -164,6 +164,8 @@
 import { computed } from "vue";
 import dayjs from "dayjs";
 import type { ReportDetail, ReportDimension } from "./types";
+import { BRAND } from "@/config/brand";
+import logoRed from "@/assets/brand/logo-marx-red.png";
 
 const props = defineProps<{ detail: ReportDetail }>();
 
@@ -242,23 +244,25 @@ function barClass(dim: ReportDimension) {
 .rp-brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   font-size: 14px;
   font-weight: 600;
   color: var(--rp-text);
 }
 
-.rp-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 5px;
-  background: var(--c-primary);
-  color: #fff;
-  font-size: 11px;
-  font-weight: 700;
+.rp-logo {
+  display: block;
+  height: 30px;
+  width: auto;
+}
+
+.rp-product {
+  padding-left: 12px;
+  border-left: 1px solid var(--rp-line);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--rp-text-2);
+  letter-spacing: 1px;
 }
 
 .rp-meta {
@@ -267,7 +271,8 @@ function barClass(dim: ReportDimension) {
 }
 
 .rp-title {
-  margin: 28px 0 4px;
+  margin: 32px 0 4px;
+  color: var(--c-primary-deep);
   font-size: 26px;
   font-weight: 700;
   letter-spacing: 2px;
@@ -507,7 +512,7 @@ function barClass(dim: ReportDimension) {
   margin: 0;
   padding: 16px 20px;
   border-left: 3px solid var(--c-primary);
-  background: #f5f8ff;
+  background: #fdf6f4;
   white-space: pre-line;
 }
 

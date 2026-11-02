@@ -33,7 +33,7 @@ module.exports = defineConfig({
     },
     proxy: {
       "/dev-api": {
-        target: "http://localhost:8081/",
+        target: process.env.DEV_PROXY_TARGET || "http://localhost:8081/",
         changeOrigin: true,
         pathRewrite: {
           "^/dev-api": "",

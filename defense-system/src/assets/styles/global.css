@@ -3,21 +3,28 @@
 @tailwind utilities;
 
 :root {
-  --c-primary: #3370ff;
-  --c-primary-hover: #5b8cff;
-  --c-primary-soft: #eef3ff;
-  --c-text: #1f2329;
-  --c-text-2: #4e5969;
-  --c-text-3: #8f959e;
-  --c-border: #e5e6eb;
-  --c-border-2: #f0f1f2;
-  --c-bg: #f5f6f7;
+  /* 大连理工大学马克思主义学院 · 学院红 */
+  --c-primary: #c3192a;
+  --c-primary-hover: #d43a47;
+  --c-primary-active: #9b0a18;
+  --c-primary-soft: #fbeceb;
+  --c-primary-deep: #8c0f1a;
+  --c-gold: #c9a063;
+  --c-gold-soft: #f8f0e3;
+  --c-text: #1f1d1b;
+  --c-text-2: #57534e;
+  --c-text-3: #8a847d;
+  --c-border: #e7e2dc;
+  --c-border-2: #f1ede8;
+  --c-bg: #f6f4f1;
   --c-surface: #ffffff;
-  --c-success: #00b42a;
-  --c-warning: #ff7d00;
-  --c-danger: #f53f3f;
-  --header-h: 56px;
-  --sider-w: 216px;
+  --c-success: #16a34a;
+  --c-warning: #d97706;
+  --c-danger: #dc2626;
+  --shadow-1: 0 1px 2px rgba(60, 30, 20, 0.04), 0 1px 3px rgba(60, 30, 20, 0.05);
+  --shadow-2: 0 4px 16px rgba(60, 30, 20, 0.08);
+  --header-h: 64px;
+  --sider-w: 224px;
 }
 
 html,
@@ -48,27 +55,43 @@ body {
   align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
 }
 
 .page-title {
+  position: relative;
   margin: 0;
+  padding-left: 14px;
   font-size: 20px;
   font-weight: 600;
   line-height: 28px;
   color: var(--c-text);
+  letter-spacing: 0.5px;
+}
+
+/* 标题左侧学院红竖条，呼应官网栏目标题 */
+.page-title::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 5px;
+  bottom: 5px;
+  width: 4px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--c-primary) 0%, var(--c-primary-deep) 100%);
 }
 
 .page-desc {
-  margin: 4px 0 0;
+  margin: 6px 0 0 14px;
   font-size: 13px;
   color: var(--c-text-3);
 }
 
 .card {
   background: var(--c-surface);
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
+  border: 1px solid var(--c-border-2);
+  border-radius: 10px;
+  box-shadow: var(--shadow-1);
 }
 
 .card-pad {
@@ -117,9 +140,20 @@ body {
 }
 
 .ant-table-wrapper .ant-table-thead > tr > th {
-  background: #f7f8fa;
-  color: var(--c-text-2);
   font-weight: 500;
+}
+
+.ant-table-wrapper .ant-table-thead > tr > th::before {
+  display: none;
+}
+
+/* 列表中的危险操作（删除等）平时用中性色，悬停再变红，避免和学院红的普通链接混在一起 */
+.ant-btn-link.ant-btn-dangerous:not(:disabled) {
+  color: var(--c-text-3);
+}
+
+.ant-btn-link.ant-btn-dangerous:not(:disabled):hover {
+  color: var(--c-danger);
 }
 
 @media print {

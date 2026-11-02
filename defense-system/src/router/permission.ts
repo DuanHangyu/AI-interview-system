@@ -4,10 +4,9 @@ import "nprogress/nprogress.css";
 import { getToken } from "@/utils/auth";
 import { useAuthStore } from "@/stores/auth";
 import { homeFor } from "./menus";
+import { APP_TITLE } from "@/config/brand";
 
 NProgress.configure({ showSpinner: false });
-
-const APP_TITLE = "AI 面试评估";
 
 router.beforeEach(async (to) => {
   NProgress.start();

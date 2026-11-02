@@ -156,7 +156,7 @@
                   <span class="num muted">{{ index + 1 }}</span>
                 </template>
                 <template v-else-if="column.key === 'dimension'">
-                  <Tag v-if="record.dimension" :bordered="false" color="blue">{{ record.dimension }}</Tag>
+                  <Tag v-if="record.dimension" :bordered="false" color="red">{{ record.dimension }}</Tag>
                   <span v-else class="muted">未设置</span>
                 </template>
                 <template v-else-if="column.key === 'content'">
@@ -371,7 +371,7 @@
             <Checkbox :checked="draftSelected.includes(i)" @change="toggleDraft(i)" />
             <div class="min-w-0">
               <div>
-                <Tag v-if="item.dimension" :bordered="false" color="blue">{{ item.dimension }}</Tag>
+                <Tag v-if="item.dimension" :bordered="false" color="red">{{ item.dimension }}</Tag>
                 <span class="font-medium">{{ item.content }}</span>
               </div>
               <div v-if="item.referenceAnswer" class="q-sub">参考答案：{{ item.referenceAnswer }}</div>
@@ -879,8 +879,8 @@ onMounted(load);
 }
 
 .flow-item.is-on {
-  border-color: #b9cdff;
-  background: #fafcff;
+  border-color: #ecb8bc;
+  background: #fffafa;
 }
 
 .flow-head {
