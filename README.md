@@ -134,6 +134,8 @@ mysql -uroot -p defense_test < scripts/local-db-seed.sql   # 测试账号 admin/
 
 从旧版本（WebSocket 实时出题）升级已有数据库：先备份，再执行 `scripts/migrations/V2__prebuilt_question_interview.sql`。旧考核没有题库，需要老师补充题库后再开放给学生。
 
+之后再执行 `scripts/migrations/V3__teacher_review.sql`（教师按维度复核评分）。
+
 ### 3. 启动
 
 ```bash

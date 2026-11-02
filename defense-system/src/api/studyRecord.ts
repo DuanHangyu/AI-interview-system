@@ -45,3 +45,24 @@ export function retakeApi(data: Record<string, any>) {
     data,
   });
 }
+// 重新评分（重新调用 AI 分析）
+export function reanalyzeApi(data: Record<string, any>) {
+  return request({
+    url: "/backend/study-record/reanalyze",
+    method: "post",
+    data,
+  });
+}
+
+// 教师复核：按维度调整分数并填写评语
+export function reviewRecord(data: {
+  recordId: number;
+  dimensions: { name: string; score: number }[];
+  comment?: string;
+}) {
+  return request({
+    url: "/backend/study-record/review",
+    method: "post",
+    data,
+  });
+}

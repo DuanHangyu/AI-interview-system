@@ -69,6 +69,9 @@ public class StudentAssessmentRecordPO {
     @Schema(description = "答辩结果")
     private String defenseResult;
 
+    @Schema(description = "教师复核结果（JSON：各维度调整后的分数与评语），为空表示未复核")
+    private String teacherReview;
+
     @Schema(description = "状态 0未完成 1已完成 2分析中 3重考")
     private Integer state;
 
@@ -102,6 +105,9 @@ public class StudentAssessmentRecordPO {
     }
 
     public Integer frontScore(){
+        if (StringUtils.isNotBlank(teacherReview) && checkScore != null) {
+            return checkScore;
+        }
         if (checkScore != null && checkScore > 0) {
             return checkScore;
         }

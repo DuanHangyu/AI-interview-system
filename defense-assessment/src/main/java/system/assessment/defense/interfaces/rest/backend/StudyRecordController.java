@@ -4,11 +4,13 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Resource;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 import system.assessment.defense.application.dto.StudentAssessmentDetailDTO;
 import system.assessment.defense.application.dto.StudyRecordDTO;
 import system.assessment.defense.application.dto.StudyRecordPagingQuery;
 import system.assessment.defense.application.dto.backed.RecordRetakeCmd;
+import system.assessment.defense.application.dto.backed.RecordReviewCmd;
 import system.assessment.defense.application.dto.backed.StudentRecordChangeScoreCmd;
 import system.assessment.defense.application.dto.backed.StudentRecordExcelQuery;
 import system.assessment.defense.application.service.StudentAssessmentService;
@@ -35,6 +37,12 @@ public class StudyRecordController {
         return studyRecordService.recordList(pagingQuery);
     }
 
+    @PostMapping("/review")
+    @Operation(summary = "教师复核：按维度调整分数并填写评语")
+    public Boolean review(@Valid @RequestBody RecordReviewCmd reviewCmd){
+        return studyRecordService.review(reviewCmd);
+    }
+
     @PostMapping("/change-score")
     @Operation(summary = "修改学生记录得分")
     public Boolean changeScore(@RequestBody StudentRecordChangeScoreCmd changeScoreCmd){
@@ -44,6 +52,7 @@ public class StudyRecordController {
     @GetMapping("/assessment-detail")
     @Operation(summary = "获取考核信息")
     public StudentAssessmentDetailDTO assessmentDetail(@RequestParam("id") Integer id){
+        studyRecordService.checkAccessible(id);
         return studentAssessmentService.assessmentDetailByRecordId(id);
     }
 
@@ -56,12 +65,14 @@ public class StudyRecordController {
     @PostMapping("/retake")
     @Operation(summary = "重新考核")
     public Boolean retake(@RequestBody RecordRetakeCmd retakeCmd){
+        studyRecordService.checkAccessible(retakeCmd.getRecordId());
         return studyRecordService.retake(retakeCmd);
     }
 
     @PostMapping("/reanalyze")
     @Operation(summary = "重新分析考核（重新生成评分，救评分卡死）")
     public Boolean reanalyze(@RequestBody RecordRetakeCmd reanalyzeCmd){
+        studyRecordService.checkAccessible(reanalyzeCmd.getRecordId());
         return studentAssessmentService.reanalyze(reanalyzeCmd.getRecordId());
     }
 }

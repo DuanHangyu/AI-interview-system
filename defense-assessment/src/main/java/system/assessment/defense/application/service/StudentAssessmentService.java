@@ -17,6 +17,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import system.assessment.defense.application.dto.*;
+import system.assessment.defense.infrastructure.common.CriteriaParser;
 import system.assessment.defense.application.dto.front.StudentAppointmentCmd;
 import system.assessment.defense.application.task.TaskQueue;
 import system.assessment.defense.application.task.TaskTypes;
@@ -130,6 +131,9 @@ public class StudentAssessmentService {
         recordService.update(Wrappers.lambdaUpdate(StudentAssessmentRecordPO.class)
                 .set(StudentAssessmentRecordPO::getState, 2)
                 .set(StudentAssessmentRecordPO::getReAnalysis, true)
+                // 重新评分后维度可能变化，之前的教师复核作废
+                .set(StudentAssessmentRecordPO::getCheckScore, 0)
+                .set(StudentAssessmentRecordPO::getTeacherReview, null)
                 .set(StudentAssessmentRecordPO::getUpdateTime, LocalDateTime.now())
                 .eq(StudentAssessmentRecordPO::getId, recordId));
         taskQueue.enqueue(TaskTypes.ANALYSIS, recordId);
@@ -540,7 +544,7 @@ public class StudentAssessmentService {
                 .orElseThrow(() -> new BusinessException(ErrorCodeEnums.USER_NOT_FOUND));
         String location = Optional.ofNullable(studentAppointmentService.getByStudentIdAndAssessmentId(studentId, id)).map(StudentAssessmentAppointmentPO::getLocation).orElse(null);
 
-        return getStudentAssessmentDetailDTO(record, student, setting, location);
+        return hideEvaluation(getStudentAssessmentDetailDTO(record, student, setting, location));
     }
 
     private StudentAssessmentDetailDTO getStudentAssessmentDetailDTO(StudentAssessmentRecordPO record,
@@ -553,9 +557,11 @@ public class StudentAssessmentService {
         if (StringUtils.isNotBlank(defenseResult)) {
             AssessmentEvaluationDTO evaluation = JSONUtil.toBean(defenseResult, AssessmentEvaluationDTO.class);
             evaluation.fillEmptyValue(quesitonAnswerIdMap, record);
-            Integer checkScore = record.getCheckScore();
             List<ValueDTO> value = evaluation.getValue();
-            int totalScore = resolveDisplayScore(checkScore, value);
+            TeacherReviewBO review = parseReview(record.getTeacherReview());
+            int aiScore = resolveDisplayScore(null, value);
+            int totalScore = review != null && record.getCheckScore() != null
+                    ? record.getCheckScore() : resolveDisplayScore(record.getCheckScore(), value);
             DefenseDTO defense = evaluation.getDefense();
             if (defense != null) {
                 defense.setDefenseAnswer(record.getDefenseContent());
@@ -594,6 +600,15 @@ public class StudentAssessmentService {
                     .state(record.getState())
                     .reAnalysis(record.getReAnalysis())
                     .location(location)
+                    .theme(setting.getTheme())
+                    .studentAccount(student.getAccount())
+                    .schoolClass(student.getSchoolClass())
+                    .interviewTime(Optional.ofNullable(record.getStartTime()).orElse(record.getCreateTime()))
+                    .defenseEnabled(setting.getDefense())
+                    .questionEnabled(setting.getQuestion())
+                    .aiScore(aiScore)
+                    .dimensions(buildDimensions(evaluation.getAnalysis(), review, setting.getAssessmentCriteria()))
+                    .review(review)
                     .build();
         }
         return StudentAssessmentDetailDTO.builder()
@@ -603,7 +618,68 @@ public class StudentAssessmentService {
                 .state(record.getState())
                 .reAnalysis(record.getReAnalysis())
                 .location(location)
+                .theme(setting.getTheme())
+                .studentAccount(student.getAccount())
+                .schoolClass(student.getSchoolClass())
+                .interviewTime(Optional.ofNullable(record.getStartTime()).orElse(record.getCreateTime()))
+                .defenseEnabled(setting.getDefense())
+                .questionEnabled(setting.getQuestion())
                 .build();
+    }
+
+    static TeacherReviewBO parseReview(String json) {
+        if (StringUtils.isBlank(json)) {
+            return null;
+        }
+        try {
+            return JSONUtil.toBean(json, TeacherReviewBO.class);
+        } catch (Exception e) {
+            log.warn("教师复核数据解析失败: {}", json);
+            return null;
+        }
+    }
+
+    static List<ReportDimensionDTO> buildDimensions(AnalysisBO analysis, TeacherReviewBO review, String criteria) {
+        if (analysis == null || CollectionUtils.isEmpty(analysis.getAnalysis())) {
+            return List.of();
+        }
+        Map<String, Integer> maxScores = CriteriaParser.maxScores(criteria);
+        Map<String, Integer> reviewed = review == null || review.getDimensions() == null ? Map.of()
+                : review.getDimensions().stream()
+                .filter(d -> d.getName() != null && d.getScore() != null)
+                .collect(Collectors.toMap(TeacherReviewBO.DimensionScore::getName,
+                        TeacherReviewBO.DimensionScore::getScore, (a, b) -> b));
+        return analysis.getAnalysis().stream()
+                .map(item -> {
+                    Integer ai = Optional.ofNullable(item.getScore()).orElse(0);
+                    return ReportDimensionDTO.builder()
+                            .name(item.getName())
+                            .aiScore(ai)
+                            .score(reviewed.getOrDefault(item.getName(), ai))
+                            .maxScore(CriteriaParser.maxScoreOf(maxScores, item.getName()))
+                            .description(item.getDescription())
+                            .build();
+                })
+                .toList();
+    }
+
+    /**
+     * 学生端：教师设置不公布结果时，只返回基本信息；评分完成前同样不返回评分内容。
+     */
+    static StudentAssessmentDetailDTO hideEvaluation(StudentAssessmentDetailDTO detail) {
+        if (Boolean.TRUE.equals(detail.getShowResult()) && Objects.equals(detail.getState(), 1)) {
+            return detail;
+        }
+        detail.setScore(null);
+        detail.setAiScore(null);
+        detail.setResult(null);
+        detail.setValue(null);
+        detail.setDefense(null);
+        detail.setAnalysis(null);
+        detail.setSummary(null);
+        detail.setDimensions(null);
+        detail.setReview(null);
+        return detail;
     }
 
     @Transactional(rollbackFor = Exception.class)

@@ -1,46 +1,33 @@
 <template>
-  <ConfigProvider :locale="zhCN">
-    <router-view v-slot="{ Component, route }">
-      <keep-alive :include="['Layout']">
-        <component :is="Component" :key="route.path" />
-      </keep-alive>
-    </router-view>
+  <ConfigProvider :locale="zhCN" :theme="theme">
+    <router-view />
   </ConfigProvider>
 </template>
 
-<script lang="ts">
-import { useAuthStore } from "@/stores/auth";
+<script setup lang="ts">
 import zhCN from "ant-design-vue/es/locale/zh_CN";
 import { ConfigProvider } from "ant-design-vue";
+import type { ThemeConfig } from "ant-design-vue/es/config-provider/context";
 import dayjs from "dayjs";
 import "dayjs/locale/zh-cn";
+
 dayjs.locale("zh-cn");
-export default {
-  name: "App",
-  components: { ConfigProvider },
-  setup() {
-    const authStore = useAuthStore();
 
-    const logout = () => {
-      authStore.logout();
-      window.location.href = "/login";
-    };
-
-    return { authStore, logout, zhCN };
+const theme: ThemeConfig = {
+  token: {
+    colorPrimary: "#3370ff",
+    colorSuccess: "#00b42a",
+    colorWarning: "#ff7d00",
+    colorError: "#f53f3f",
+    colorText: "#1f2329",
+    colorTextSecondary: "#4e5969",
+    colorBorder: "#e5e6eb",
+    colorBorderSecondary: "#f0f1f2",
+    colorBgLayout: "#f5f6f7",
+    borderRadius: 6,
+    fontSize: 14,
+    fontFamily:
+      '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif',
   },
 };
 </script>
-
-<style scoped>
-.top-bar {
-  background: #f0f0f0;
-  padding: 10px;
-  text-align: right;
-}
-html,
-body {
-  margin: 0;
-  padding: 0;
-  min-height: 100%;
-}
-</style>

@@ -1,138 +1,81 @@
-import { createRouter, createWebHistory } from "vue-router";
-import { Layout } from "@/components/Layout";
-import StudentContainter from "@/components/Layout/componets/StudentContainter.vue";
+import { createRouter, createWebHistory, RouteRecordRaw } from "vue-router";
+import AppLayout from "@/layouts/AppLayout.vue";
 
-const routes = [
-  {
-    path: "/login",
-    name: "Login",
-    component: () => import(/* webpackPreload: true */ "@/views/Login.vue"),
-  },
-  {
-    path: "/:pathMatch(.*)*",
-    component: () =>
-      import(/* webpackPrefetch: true */ "@/views/error/404.vue"),
-    hidden: true,
-  },
-];
+const STUDENT = ["STUDENT"];
+const ADMIN = ["ADMIN"];
+const STAFF = ["TEACHER", "ADMIN"];
 
-export const studnetRoutes = [
+const routes: RouteRecordRaw[] = [
+  { path: "/login", name: "Login", component: () => import("@/views/Login.vue"), meta: { public: true } },
+  {
+    path: "/interview",
+    name: "InterviewRoom",
+    component: () => import("@/views/student/InterviewRoom.vue"),
+    meta: { roles: STUDENT, title: "面试中" },
+  },
   {
     path: "/",
-    component: StudentContainter,
-    redirect: "/studentDashboard",
+    component: AppLayout,
     children: [
       {
-        path: "/interview",
-        name: "InterviewPage",
-        component: () =>
-          import(/* webpackPreload: true */ "@/views/studentDashboard/interview/index.vue"),
-        meta: { role: ["student"] },
-      },
-      // 旧版答辩 / 问答页面地址，统一进入新的面试页
-      {
-        path: "/dashboard",
-        redirect: (to: any) => ({ path: "/interview", query: to.query }),
+        path: "student/interviews",
+        component: () => import("@/views/student/MyInterviews.vue"),
+        meta: { roles: STUDENT, title: "我的面试" },
       },
       {
-        path: "/question",
-        redirect: (to: any) => ({ path: "/interview", query: to.query }),
+        path: "student/reports",
+        component: () => import("@/views/student/MyReports.vue"),
+        meta: { roles: STUDENT, title: "面试报告" },
       },
       {
-        path: "/result",
-        name: "ResultPage",
-        component: () =>
-          import(/* webpackPrefetch: true */ "@/views/ResultPage.vue"),
-        meta: { role: ["student"] },
+        path: "student/reports/:assessmentId",
+        component: () => import("@/views/report/StudentReport.vue"),
+        meta: { roles: STUDENT, title: "面试报告", menu: "/student/reports" },
       },
       {
-        path: "/resultOver",
-        name: "ResultOverPage",
-        component: () =>
-          import(/* webpackPrefetch: true */ "@/views/ResultOverPage.vue"),
-        meta: { role: ["student"] },
+        path: "records",
+        component: () => import("@/views/teacher/Records.vue"),
+        meta: { roles: STAFF, title: "面试记录" },
       },
       {
-        path: "/studentDashboard",
-        name: "StudentDashboard",
-        component: () =>
-          import(
-            /* webpackPrefetch: true */ "@/views/studentDashboard/index.vue"
-          ),
-        meta: { role: ["student"] },
+        path: "records/:recordId",
+        component: () => import("@/views/report/TeacherReport.vue"),
+        meta: { roles: STAFF, title: "面试报告", menu: "/records" },
       },
       {
-        path: "/studyDetail",
-        name: "StudentStudyDetail",
-        component: () =>
-          import(
-            /* webpackPrefetch: true */ "@/views/studentDashboard/studyDetail/index.vue"
-          ),
-        meta: { role: ["student"] },
+        path: "assessments",
+        component: () => import("@/views/teacher/Assessments.vue"),
+        meta: { roles: STAFF, title: "面试管理" },
+      },
+      {
+        path: "assessments/new",
+        component: () => import("@/views/teacher/AssessmentEditor.vue"),
+        meta: { roles: STAFF, title: "新建面试", menu: "/assessments" },
+      },
+      {
+        path: "assessments/:id/edit",
+        component: () => import("@/views/teacher/AssessmentEditor.vue"),
+        meta: { roles: STAFF, title: "编辑面试", menu: "/assessments" },
+      },
+      {
+        path: "students",
+        component: () => import("@/views/manage/Students.vue"),
+        meta: { roles: STAFF, title: "学生管理" },
+      },
+      {
+        path: "teachers",
+        component: () => import("@/views/manage/Teachers.vue"),
+        meta: { roles: ADMIN, title: "教师管理" },
       },
     ],
   },
-];
-
-export const teacherRoutes = [
-  {
-    path: "/",
-    component: Layout,
-    redirect: "/teacherDashboard",
-    children: [
-      {
-        path: "/teacherDashboard",
-        name: "TeacherDashboard",
-        component: () =>
-          import(
-            /* webpackPreload: true */ "@/views/teacherDashboard/index.vue"
-          ),
-        meta: { role: ["teacher"] },
-      },
-    ],
-  },
-  {
-    path: "/studyDetail",
-    name: "StudyDetail",
-    component: () =>
-      import(/* webpackPrefetch: true */ "@/views/studyDetail/index.vue"),
-    meta: { role: ["teacher"] },
-  },
-];
-
-export const adminRoutes = [
-  {
-    path: "/",
-    component: Layout,
-    redirect: "/adminDashboard",
-    children: [
-      {
-        path: "/adminDashboard",
-        name: "AdminDashboard",
-        component: () =>
-          import(/* webpackPreload: true */ "@/views/adminDashboard/home.vue"),
-        meta: { role: ["admin"] },
-      },
-    ],
-  },
-  {
-    path: "/studyDetail",
-    name: "StudyDetail",
-    component: () =>
-      import(/* webpackPrefetch: true */ "@/views/studyDetail/index.vue"),
-    meta: { role: ["admin"] },
-  },
+  { path: "/:pathMatch(.*)*", name: "NotFound", component: () => import("@/views/NotFound.vue"), meta: { public: true } },
 ];
 
 const router = createRouter({
   history: createWebHistory(),
   routes,
-  scrollBehavior(to, from, savedPosition) {
-    if (savedPosition) {
-      return savedPosition;
-    }
-    return { top: 0 };
-  },
+  scrollBehavior: (to, from, saved) => saved || { top: 0 },
 });
 
 export default router;

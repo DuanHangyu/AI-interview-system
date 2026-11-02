@@ -1,13 +1,12 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
-  content: [
-    "./index.html",
-    "./src/**/*.{vue,js,ts,jsx,tsx}", // 包含 Vue + TS 文件
-  ],
+  content: ["./public/index.html", "./src/**/*.{vue,js,ts}"],
+  // 基础样式由 ant-design-vue 的 reset.css 提供，关闭 preflight 以免覆盖组件样式
+  corePlugins: { preflight: false },
   theme: {
     extend: {
-      screens: {
-        "4xl": "1921px", // 自定义断点，大于1920px时应用
+      colors: {
+        primary: "#3370ff",
       },
     },
   },

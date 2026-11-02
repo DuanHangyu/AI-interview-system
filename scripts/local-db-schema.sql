@@ -156,6 +156,7 @@ CREATE TABLE `student_assessment_record` (
   `defense_result` TEXT,
   `state` INT DEFAULT NULL,
   `re_analysis` TINYINT(1) DEFAULT 0,
+  `teacher_review` TEXT NULL COMMENT '教师复核结果 JSON',
   `create_time` DATETIME DEFAULT CURRENT_TIMESTAMP,
   `update_time` DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),

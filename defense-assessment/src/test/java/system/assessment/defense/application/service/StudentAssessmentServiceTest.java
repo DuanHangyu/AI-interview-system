@@ -1,5 +1,6 @@
 package system.assessment.defense.application.service;
 
+import system.assessment.defense.application.dto.*;
 import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
@@ -148,5 +149,37 @@ class StudentAssessmentServiceTest {
                 mock(StudentAssessmentAppointmentService.class),
                 mock(TaskQueue.class)
         );
+    }
+
+    @Test
+    void buildsDimensionsWithReviewAndMaxScore() {
+        AnalysisBO analysis = new AnalysisBO();
+        AnalysisDTO tech = new AnalysisDTO();
+        tech.setName("技术实现");
+        tech.setScore(30);
+        AnalysisDTO quality = new AnalysisDTO();
+        quality.setName("工程质量");
+        quality.setScore(20);
+        analysis.setAnalysis(java.util.List.of(tech, quality));
+        TeacherReviewBO review = TeacherReviewBO.builder()
+                .dimensions(java.util.List.of(new TeacherReviewBO.DimensionScore("技术实现", 35)))
+                .build();
+        java.util.List<ReportDimensionDTO> dims = StudentAssessmentService.buildDimensions(analysis, review,
+                "技术实现（40分）工程质量（30分）");
+        org.assertj.core.api.Assertions.assertThat(dims).extracting(ReportDimensionDTO::getScore).containsExactly(35, 20);
+        org.assertj.core.api.Assertions.assertThat(dims).extracting(ReportDimensionDTO::getAiScore).containsExactly(30, 20);
+        org.assertj.core.api.Assertions.assertThat(dims).extracting(ReportDimensionDTO::getMaxScore).containsExactly(40, 30);
+    }
+
+    @Test
+    void hidesEvaluationFromStudentWhenResultsAreNotPublished() {
+        StudentAssessmentDetailDTO detail = StudentAssessmentDetailDTO.builder()
+                .score(80).summary("ok").showResult(false).state(1).build();
+        StudentAssessmentService.hideEvaluation(detail);
+        org.assertj.core.api.Assertions.assertThat(detail.getScore()).isNull();
+        org.assertj.core.api.Assertions.assertThat(detail.getSummary()).isNull();
+        StudentAssessmentDetailDTO shown = StudentAssessmentDetailDTO.builder()
+                .score(80).showResult(true).state(1).build();
+        org.assertj.core.api.Assertions.assertThat(StudentAssessmentService.hideEvaluation(shown).getScore()).isEqualTo(80);
     }
 }

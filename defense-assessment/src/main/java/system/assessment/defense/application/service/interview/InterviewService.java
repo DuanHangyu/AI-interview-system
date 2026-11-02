@@ -274,6 +274,7 @@ public class InterviewService {
                 .set(StudentAssessmentRecordPO::getDefenseResult, null)
                 .set(StudentAssessmentRecordPO::getScore, -1)
                 .set(StudentAssessmentRecordPO::getCheckScore, 0)
+                .set(StudentAssessmentRecordPO::getTeacherReview, null)
                 .set(StudentAssessmentRecordPO::getReAnalysis, false)
                 .set(StudentAssessmentRecordPO::getUpdateTime, now)
                 .eq(StudentAssessmentRecordPO::getId, record.getId())

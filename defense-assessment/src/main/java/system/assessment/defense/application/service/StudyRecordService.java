@@ -28,6 +28,12 @@ import system.assessment.defense.infrastructure.repository.dao.service.StudentAs
 import system.assessment.defense.infrastructure.repository.dao.service.StudentAssessmentRecordService;
 import system.assessment.defense.infrastructure.repository.dao.service.UserService;
 
+import system.assessment.defense.application.dto.backed.RecordReviewCmd;
+import system.assessment.defense.infrastructure.common.CriteriaParser;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.Objects;
+import java.util.Optional;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -98,7 +104,8 @@ public class StudyRecordService {
         IPage<StudentAssessmentRecordPO> poPage = studentAssessmentService.page(new Page<>(pagingQuery.getPage(), pagingQuery.getSize()),
                 Wrappers.lambdaQuery(StudentAssessmentRecordPO.class)
                         .in(StudentAssessmentRecordPO::getStudentId, studentIds)
-                        .eq(StudentAssessmentRecordPO::getState, 1)
+                        // 已完成和评分中的记录；评分中的记录教师可看到进度、可重新评分
+                        .in(StudentAssessmentRecordPO::getState, 1, 2)
                         .in(CollectionUtils.isNotEmpty(searchStudentIds), StudentAssessmentRecordPO::getStudentId, searchStudentIds)
                         .in(CollectionUtils.isNotEmpty(assessmentIds), StudentAssessmentRecordPO::getAssessmentId, assessmentIds)
                         .orderByDesc(StudentAssessmentRecordPO::getUpdateTime));
@@ -128,14 +135,84 @@ public class StudyRecordService {
                         .score(item.getScore())
                         .checkScore(item.getCheckScore())
                         .totalScore(setting.getTotalScore())
-                        .assessmentTime(item.getCreateTime())
+                        .assessmentTime(Optional.ofNullable(item.getStartTime()).orElse(item.getCreateTime()))
                         .state(item.getState())
+                        .finalScore(item.frontScore())
+                        .reviewed(StringUtils.isNotBlank(item.getTeacherReview()))
+                        .passScore(setting.getPassScore())
+                        .studentAccount(user.getAccount())
+                        .schoolClass(user.getSchoolClass())
                         .build();
             });
         }
 
         // 如果没有记录，返回空分页结果
         return new Page<>(pagingQuery.getPage(), pagingQuery.getSize());
+    }
+
+    /**
+     * 校验当前教师能否操作该记录：管理员可操作全部，教师只能操作自己面试中的学生。
+     */
+    public StudentAssessmentRecordPO checkAccessible(Integer recordId) {
+        StudentAssessmentRecordPO record = Optional.ofNullable(recordId == null ? null : studentAssessmentService.getById(recordId))
+                .orElseThrow(() -> new BusinessException(ErrorCodeEnums.RECORD_NOT_FOUND));
+        TeacherSummary teacherSummary = userService.findTeacherSummaryById(StpUtil.getLoginIdAsInt())
+                .orElseThrow(() -> new BusinessException(ErrorCodeEnums.USER_NOT_FOUND));
+        List<Integer> studentIds = teacherSummary.getStudentIds();
+        if (CollectionUtils.isEmpty(studentIds) || !studentIds.contains(record.getStudentId())) {
+            throw new BusinessException(403, "无权操作该记录");
+        }
+        return record;
+    }
+
+    /**
+     * 教师复核：按维度调整分数并填写评语。最终得分 = 调整后各维度之和，AI 原始评分保留不变。
+     */
+    public Boolean review(RecordReviewCmd cmd) {
+        int teacherId = StpUtil.getLoginIdAsInt();
+        StudentAssessmentRecordPO record = checkAccessible(cmd.getRecordId());
+        if (!Objects.equals(record.getState(), 1) || StringUtils.isBlank(record.getDefenseResult())) {
+            throw new BusinessException(400, "评分完成后才能复核");
+        }
+        AssessmentSettingPO setting = assessmentSettingService.getById(record.getAssessmentId());
+        AssessmentEvaluationDTO evaluation = JSONUtil.toBean(record.getDefenseResult(), AssessmentEvaluationDTO.class);
+        List<AnalysisDTO> aiDimensions = Optional.ofNullable(evaluation.getAnalysis())
+                .map(AnalysisBO::getAnalysis).orElse(List.of());
+        Map<String, Integer> maxScores = CriteriaParser.maxScores(setting == null ? null : setting.getAssessmentCriteria());
+        Map<String, Integer> submitted = Optional.ofNullable(cmd.getDimensions()).orElse(List.of()).stream()
+                .filter(d -> d.getName() != null)
+                .collect(Collectors.toMap(TeacherReviewBO.DimensionScore::getName,
+                        d -> Optional.ofNullable(d.getScore()).orElse(0), (a, b) -> b));
+
+        List<TeacherReviewBO.DimensionScore> dimensions = new java.util.ArrayList<>();
+        int total = 0;
+        for (AnalysisDTO dimension : aiDimensions) {
+            int score = submitted.getOrDefault(dimension.getName(),
+                    Optional.ofNullable(dimension.getScore()).orElse(0));
+            Integer max = CriteriaParser.maxScoreOf(maxScores, dimension.getName());
+            if (score < 0 || (max != null && score > max)) {
+                throw new BusinessException(400, String.format("“%s”的分数应在 0～%s 之间",
+                        dimension.getName(), max == null ? "满分" : max));
+            }
+            dimensions.add(new TeacherReviewBO.DimensionScore(dimension.getName(), score));
+            total += score;
+        }
+        if (setting != null && setting.getTotalScore() != null && total > setting.getTotalScore()) {
+            throw new BusinessException(400, "各维度分数之和不能超过总分 " + setting.getTotalScore());
+        }
+        String reviewerName = userService.findById(teacherId).map(UserPO::getName).orElse(null);
+        TeacherReviewBO review = TeacherReviewBO.builder()
+                .dimensions(dimensions)
+                .comment(StringUtils.trimToNull(cmd.getComment()))
+                .reviewerId(teacherId)
+                .reviewerName(reviewerName)
+                .reviewTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")))
+                .build();
+        return studentAssessmentService.update(Wrappers.lambdaUpdate(StudentAssessmentRecordPO.class)
+                .set(StudentAssessmentRecordPO::getCheckScore, total)
+                .set(StudentAssessmentRecordPO::getTeacherReview, JSONUtil.toJsonStr(review))
+                .eq(StudentAssessmentRecordPO::getId, record.getId())
+                .eq(StudentAssessmentRecordPO::getState, 1));
     }
 
     public Boolean changeScore(StudentRecordChangeScoreCmd changeScoreCmd) {

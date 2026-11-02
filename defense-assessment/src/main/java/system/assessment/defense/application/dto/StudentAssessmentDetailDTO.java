@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -60,4 +61,22 @@ public class StudentAssessmentDetailDTO {
 
     @Schema(description = "地点")
     private String location;
+    @Schema(description = "面试名称")
+    private String theme;
+    @Schema(description = "学号")
+    private String studentAccount;
+    @Schema(description = "班级")
+    private String schoolClass;
+    @Schema(description = "面试时间")
+    private LocalDateTime interviewTime;
+    @Schema(description = "是否包含答辩环节")
+    private Boolean defenseEnabled;
+    @Schema(description = "是否包含问答环节")
+    private Boolean questionEnabled;
+    @Schema(description = "AI 评分（各维度 AI 分数之和）")
+    private Integer aiScore;
+    @Schema(description = "评分维度（含 AI 分、复核后分数、满分）")
+    private List<ReportDimensionDTO> dimensions;
+    @Schema(description = "教师复核信息，未复核为空")
+    private TeacherReviewBO review;
 }

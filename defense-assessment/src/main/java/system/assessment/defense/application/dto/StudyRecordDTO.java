@@ -42,4 +42,19 @@ public class StudyRecordDTO {
 
     @Schema(description = "状态")
     private Integer state;
+
+    @Schema(description = "最终得分（复核后优先）")
+    private Integer finalScore;
+
+    @Schema(description = "是否已被教师复核")
+    private Boolean reviewed;
+
+    @Schema(description = "及格分")
+    private Integer passScore;
+
+    @Schema(description = "学号")
+    private String studentAccount;
+
+    @Schema(description = "班级")
+    private String schoolClass;
 }
