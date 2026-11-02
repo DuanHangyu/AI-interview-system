@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
 import system.assessment.defense.application.manage.SpeechManager;
 import system.assessment.defense.application.service.interview.AssessmentAnalysisService;
 import system.assessment.defense.application.service.interview.QuestionBankService;
+import system.assessment.defense.infrastructure.common.WavUtils;
 import system.assessment.defense.infrastructure.repository.dao.po.StudentAssessmentQuestionAnswerPO;
 import system.assessment.defense.infrastructure.repository.dao.po.StudentAssessmentRecordPO;
 import system.assessment.defense.infrastructure.repository.dao.service.StudentAssessmentQuestionAnswerService;
@@ -25,6 +26,9 @@ public class InterviewTaskHandlers {
 
     static final String NO_ANSWER = "没有回答";
     static final String TRANSCRIBE_FAILED = "（语音转写失败，无法评估）";
+    static final String NO_VOICE = "（录音中没有检测到声音）";
+    /** 峰值低于约 -30dBFS 视为没有采集到人声（正常说话的峰值远高于此） */
+    static final double SILENCE_PEAK = 0.035;
 
     private final SpeechManager speechManager;
     private final FileStorage fileStorage;
@@ -51,8 +55,9 @@ public class InterviewTaskHandlers {
                 if (record == null || StringUtils.isBlank(record.getDefenseVoice()) || record.getDefenseContent() != null) {
                     return;
                 }
-                String text = speechManager.transcribe(fileStorage.read(record.getDefenseVoice()), null);
-                saveDefense(recordId, record.getDefenseVoice(), StringUtils.defaultIfBlank(text, NO_ANSWER));
+                byte[] wav = fileStorage.read(record.getDefenseVoice());
+                String text = speechManager.transcribe(wav, null);
+                saveDefense(recordId, record.getDefenseVoice(), StringUtils.defaultIfBlank(text, emptyText(wav)));
             }
 
             @Override
@@ -123,10 +128,8 @@ public class InterviewTaskHandlers {
                 if (voice == null || existing != null) {
                     return;
                 }
-                // 把题目作为识别上下文，提升专业术语的识别准确率
-                String context = followUp ? answer.getFollowQuestion() : answer.getQuestion();
-                String text = speechManager.transcribe(fileStorage.read(voice), context);
-                save(answerId, voice, StringUtils.defaultIfBlank(text, NO_ANSWER));
+                String question = followUp ? answer.getFollowQuestion() : answer.getQuestion();
+                save(answerId, voice, transcribeAnswer(fileStorage.read(voice), question));
             }
 
             @Override
@@ -146,6 +149,44 @@ public class InterviewTaskHandlers {
                         .eq(voiceColumn, voice));
             }
         };
+    }
+
+    /**
+     * 转写一道题的回答。题目作为识别上下文能提升专业术语的准确率，但录音几乎无声时模型会把上下文原样输出，
+     * 所以静音录音不带上下文，并且丢弃与题目本身重复的识别结果。
+     */
+    String transcribeAnswer(byte[] wav, String question) {
+        boolean silent = isSilent(wav);
+        String text = speechManager.transcribe(wav, silent ? null : question);
+        if (StringUtils.isBlank(text) || echoesQuestion(text, question)) {
+            return silent ? NO_VOICE : NO_ANSWER;
+        }
+        return text;
+    }
+
+    static boolean isSilent(byte[] wav) {
+        try {
+            return WavUtils.peakLevel(wav) < SILENCE_PEAK;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
+    private static String emptyText(byte[] wav) {
+        return isSilent(wav) ? NO_VOICE : NO_ANSWER;
+    }
+
+    /**
+     * 识别结果只是把题目复述了一遍（或是题目中较长的一段），视为没有作答；很短的片段（例如只答了一个关键词）保留。
+     */
+    static boolean echoesQuestion(String text, String question) {
+        String t = lettersOnly(text);
+        String q = lettersOnly(question);
+        return !t.isEmpty() && q.contains(t) && (t.length() >= 10 || t.length() * 2 >= q.length());
+    }
+
+    private static String lettersOnly(String text) {
+        return text == null ? "" : text.replaceAll("[^\\p{L}\\p{N}]", "").toLowerCase();
     }
 
     private void saveDefense(Integer recordId, String voice, String text) {

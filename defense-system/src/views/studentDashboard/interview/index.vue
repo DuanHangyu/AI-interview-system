@@ -179,6 +179,7 @@
     <div
       v-if="stage === 'intro'"
       class="absolute inset-0 z-40 flex items-center justify-center bg-[rgba(95,90,87,0.9)]"
+      @pointerdown="recorder.resume()"
     >
       <div class="w-[520px] max-w-[90vw] rounded-2xl bg-white/95 px-8 py-7 shadow-2xl">
         <div class="text-xl font-semibold text-[#1f2937] mb-3">{{ state?.theme }}</div>
@@ -194,11 +195,39 @@
           </li>
           <li>中途刷新或断网不会丢失已提交的回答，重新进入即可继续</li>
         </ul>
+        <div class="mt-5 rounded-xl bg-[#f3f4f6] px-4 py-3 text-left">
+          <div class="flex items-center justify-between text-sm text-[#374151]">
+            <span class="font-medium">麦克风检测</span>
+            <span :class="micHeard ? 'text-[#16a34a]' : 'text-[#b45309]'">
+              {{ micHeard ? "已检测到声音" : "请对着麦克风说一句话" }}
+            </span>
+          </div>
+          <div class="mt-2 h-2 rounded-full bg-[#e5e7eb] overflow-hidden">
+            <div
+              class="h-full bg-[#e75f49] transition-[width] duration-100"
+              :style="{ width: `${Math.min(100, recorder.volumeLevel.value * 2)}%` }"
+            ></div>
+          </div>
+          <select
+            v-if="recorder.devices.value.length > 1"
+            class="mt-3 w-full h-9 rounded-lg border border-[#d1d5db] bg-white px-2 text-sm text-[#374151]"
+            :value="recorder.deviceId.value"
+            :disabled="busy"
+            @change="onDeviceChange"
+          >
+            <option v-for="d in recorder.devices.value" :key="d.deviceId" :value="d.deviceId">
+              {{ d.label }}
+            </option>
+          </select>
+          <div v-else class="mt-2 text-xs text-[#6b7280]">
+            当前设备：{{ recorder.deviceLabel.value || "默认麦克风" }}
+          </div>
+        </div>
         <div class="mt-6 text-center">
           <button
             class="h-11 px-10 rounded-full bg-[#e75f49] text-white text-base font-medium hover:bg-[#f07157] disabled:opacity-60"
             :disabled="busy"
-            @click="beginInterview"
+            @click="confirmBegin"
           >
             <LoadingOutlined class="mr-1" v-if="busy" />
             开始面试
@@ -227,12 +256,43 @@
     <div
       v-if="blocking"
       class="absolute inset-0 z-50 flex items-center justify-center bg-[rgba(95,90,87,0.86)]"
+      @pointerdown="recorder.resume()"
     >
       <div class="w-[460px] max-w-[90vw] rounded-2xl bg-white/95 px-8 py-7 text-center shadow-2xl">
         <div class="text-xl font-semibold text-[#1f2937] mb-3">{{ blocking.title }}</div>
         <div class="text-base leading-7 text-[#4b5563] whitespace-pre-line">
           {{ blocking.message }}
         </div>
+        <template v-if="blocking.micCheck">
+        <div class="mt-5 rounded-xl bg-[#f3f4f6] px-4 py-3 text-left">
+            <div class="flex items-center justify-between text-sm text-[#374151]">
+              <span class="font-medium">麦克风检测</span>
+              <span :class="micHeard ? 'text-[#16a34a]' : 'text-[#b45309]'">
+                {{ micHeard ? "已检测到声音" : "请对着麦克风说一句话" }}
+              </span>
+            </div>
+            <div class="mt-2 h-2 rounded-full bg-[#e5e7eb] overflow-hidden">
+              <div
+                class="h-full bg-[#e75f49] transition-[width] duration-100"
+                :style="{ width: `${Math.min(100, recorder.volumeLevel.value * 2)}%` }"
+              ></div>
+            </div>
+            <select
+              v-if="recorder.devices.value.length > 1"
+              class="mt-3 w-full h-9 rounded-lg border border-[#d1d5db] bg-white px-2 text-sm text-[#374151]"
+              :value="recorder.deviceId.value"
+              :disabled="busy"
+              @change="onDeviceChange"
+            >
+              <option v-for="d in recorder.devices.value" :key="d.deviceId" :value="d.deviceId">
+                {{ d.label }}
+              </option>
+            </select>
+            <div v-else class="mt-2 text-xs text-[#6b7280]">
+              当前设备：{{ recorder.deviceLabel.value || "默认麦克风" }}
+            </div>
+          </div>
+        </template>
         <div class="mt-6 flex justify-center space-x-3">
           <button
             v-for="action in blocking.actions"
@@ -273,7 +333,7 @@ import {
   uploadAnswerAudio,
   uploadDefenseAudio,
 } from "@/api/interview";
-import { useAudioRecorder } from "@/composables/useAudioRecorder";
+import { SILENCE_PEAK, useAudioRecorder } from "@/composables/useAudioRecorder";
 
 type Stage = "loading" | "intro" | "defense" | "drawing" | "question" | "submitting";
 type QuestionPhase = "idle" | "playing" | "recording" | "uploading";
@@ -286,6 +346,7 @@ interface Blocking {
   title: string;
   message: string;
   actions: BlockingAction[];
+  micCheck?: boolean;
 }
 
 const MIN_RECORD_SECONDS = 3;
@@ -335,6 +396,8 @@ const filePreviewUrl = computed(() => {
   if (token) params.set("Authorization", `Bearer ${token}`);
   return `${process.env.VUE_APP_BASE_API}/file/preview?${params.toString()}`;
 });
+
+const micHeard = computed(() => recorder.peakLevel.value >= SILENCE_PEAK);
 
 const recordedSeconds = computed(() =>
   recordStartedAt.value ? Math.floor((now.value - recordStartedAt.value) / 1000) : 0
@@ -396,8 +459,35 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function showBlocking(title: string, messageText: string, actions: BlockingAction[]) {
-  blocking.value = { title, message: messageText, actions };
+function showBlocking(title: string, messageText: string, actions: BlockingAction[], micCheck = false) {
+  blocking.value = { title, message: messageText, actions, micCheck };
+  if (micCheck) recorder.resetPeak();
+}
+
+async function onDeviceChange(event: Event) {
+  const id = (event.target as HTMLSelectElement).value;
+  busy.value = true;
+  try {
+    if (!(await recorder.selectDevice(id))) {
+      message.error(recorder.error.value || "切换麦克风失败");
+    }
+    recorder.resetPeak();
+  } finally {
+    busy.value = false;
+  }
+}
+
+// 录音几乎是静音时让学生检查设备后重录，而不是把空录音交上去
+function showSilentRecording(redo: () => void, submitAnyway: () => void) {
+  showBlocking(
+    "没有检测到你的声音",
+    "这段录音几乎是静音的，可能是麦克风被静音或选错了设备。\n请对着麦克风说话，确认下方音量条有跳动后重新录音。",
+    [
+      { label: "重新录音", primary: true, run: () => { blocking.value = null; redo(); } },
+      { label: "仍然提交", run: () => { blocking.value = null; submitAnyway(); } },
+    ],
+    true
+  );
 }
 
 function clearCountdown() {
@@ -492,6 +582,21 @@ function applyState(next: InterviewState) {
   }
 }
 
+function confirmBegin() {
+  if (busy.value) return;
+  if (micHeard.value) {
+    beginInterview();
+    return;
+  }
+  Modal.confirm({
+    title: "还没有检测到你的声音",
+    content: "请确认麦克风没有被静音、选择了正确的设备，然后对着麦克风说一句话。确定要直接开始吗？",
+    okText: "仍然开始",
+    cancelText: "再检测一下",
+    onOk: beginInterview,
+  });
+}
+
 async function beginInterview() {
   if (busy.value) return;
   busy.value = true;
@@ -555,6 +660,10 @@ async function finishDefense() {
   defenseRecording.value = false;
   recordStartedAt.value = 0;
   const audio = await recorder.stop();
+  if (recorder.peakLevel.value < SILENCE_PEAK) {
+    showSilentRecording(startDefense, () => sendDefense(audio));
+    return;
+  }
   await sendDefense(audio);
 }
 
@@ -701,6 +810,13 @@ async function finishAnswer() {
   recordStartedAt.value = 0;
   questionPhase.value = "uploading";
   const audio = await recorder.stop();
+  if (recorder.peakLevel.value < SILENCE_PEAK) {
+    showSilentRecording(
+      () => { questionPhase.value = "idle"; startAnswer(); },
+      () => sendAnswer(current.index, current.followUp, audio)
+    );
+    return;
+  }
   await sendAnswer(current.index, current.followUp, audio);
 }
 

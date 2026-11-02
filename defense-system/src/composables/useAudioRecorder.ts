@@ -1,15 +1,23 @@
 import { onUnmounted, ref } from "vue";
 
 // 本地录音：麦克风 → 16kHz 单声道 16bit PCM → WAV Blob。不做任何网络传输。
+// 多声道输入（部分麦克风阵列的第一个声道是静音的）先混成单声道再处理。
 const TARGET_SAMPLE_RATE = 16000;
 const MEDIA_REQUEST_TIMEOUT = 10000;
+const DEVICE_STORAGE_KEY = "interview.micDeviceId";
+// 峰值低于这个电平（约 -30dBFS）视为没有采集到人声
+export const SILENCE_PEAK = 0.035;
 
 const WORKLET_SOURCE = `
 class RecorderProcessor extends AudioWorkletProcessor {
   process(inputs) {
     const input = inputs[0];
     if (input && input.length > 0 && input[0].length > 0) {
-      this.port.postMessage(input[0].slice(0));
+      const mono = new Float32Array(input[0].length);
+      for (const channel of input) {
+        for (let i = 0; i < mono.length; i++) mono[i] += channel[i] / input.length;
+      }
+      this.port.postMessage(mono, [mono.buffer]);
     }
     return true;
   }
@@ -17,7 +25,24 @@ class RecorderProcessor extends AudioWorkletProcessor {
 registerProcessor("recorder-processor", RecorderProcessor);
 `;
 
-function requestMicrophone(): Promise<MediaStream> {
+function readSavedDevice() {
+  try {
+    return localStorage.getItem(DEVICE_STORAGE_KEY) || "";
+  } catch (e) {
+    return "";
+  }
+}
+
+function saveDevice(deviceId: string) {
+  try {
+    if (deviceId) localStorage.setItem(DEVICE_STORAGE_KEY, deviceId);
+    else localStorage.removeItem(DEVICE_STORAGE_KEY);
+  } catch (e) {
+    // 存不了就每次用默认设备
+  }
+}
+
+function requestMicrophone(deviceId: string): Promise<MediaStream> {
   if (!navigator.mediaDevices?.getUserMedia) {
     return Promise.reject(new Error("当前浏览器不支持麦克风访问"));
   }
@@ -26,7 +51,22 @@ function requestMicrophone(): Promise<MediaStream> {
   let timeoutId: number | undefined;
   const mediaRequest = navigator.mediaDevices
     .getUserMedia({
-      audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true },
+      audio: {
+        deviceId: deviceId ? { exact: deviceId } : undefined,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    })
+    .catch((error) => {
+      // 保存的设备已拔出时退回默认设备
+      if (deviceId && (error?.name === "OverconstrainedError" || error?.name === "NotFoundError")) {
+        saveDevice("");
+        return navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        });
+      }
+      throw error;
     })
     .then((stream) => {
       if (finished) {
@@ -78,6 +118,11 @@ export function useAudioRecorder() {
   const recording = ref(false);
   const error = ref("");
   const volumeLevel = ref(0);
+  // 本次录音（或麦克风测试）期间的最大峰值，0～1
+  const peakLevel = ref(0);
+  const devices = ref<{ deviceId: string; label: string }[]>([]);
+  const deviceId = ref(readSavedDevice());
+  const deviceLabel = ref("");
 
   let stream: MediaStream | null = null;
   let audioContext: AudioContext | null = null;
@@ -86,39 +131,79 @@ export function useAudioRecorder() {
   let scriptNode: ScriptProcessorNode | null = null;
   let muteNode: GainNode | null = null;
   let chunks: Int16Array[] = [];
-  // 降采样时跨帧保留的小数位置
-  let resampleOffset = 0;
+  // 降采样：把输入样本按 ratio 个一组求平均（简单低通），跨帧累计
+  let resampleAcc = 0;
+  let resampleCount = 0;
+  let resamplePos = 0;
 
   function handleFrame(frame: Float32Array) {
     let sum = 0;
-    for (let i = 0; i < frame.length; i++) sum += frame[i] * frame[i];
+    let peak = 0;
+    for (let i = 0; i < frame.length; i++) {
+      sum += frame[i] * frame[i];
+      peak = Math.max(peak, Math.abs(frame[i]));
+    }
     volumeLevel.value = Math.min(100, Math.round(Math.sqrt(sum / frame.length) * 400));
+    peakLevel.value = Math.max(peakLevel.value, peak);
     if (!recording.value || !audioContext) return;
 
     const ratio = audioContext.sampleRate / TARGET_SAMPLE_RATE;
-    const outLength = Math.floor((frame.length - resampleOffset) / ratio);
-    if (outLength <= 0) {
-      resampleOffset -= frame.length;
-      return;
+    const out: number[] = [];
+    for (let i = 0; i < frame.length; i++) {
+      resampleAcc += frame[i];
+      resampleCount++;
+      resamplePos += 1;
+      if (resamplePos >= ratio) {
+        resamplePos -= ratio;
+        const sample = Math.max(-1, Math.min(1, resampleAcc / resampleCount));
+        out.push(sample < 0 ? sample * 0x8000 : sample * 0x7fff);
+        resampleAcc = 0;
+        resampleCount = 0;
+      }
     }
-    const out = new Int16Array(outLength);
-    for (let i = 0; i < outLength; i++) {
-      const start = Math.floor(resampleOffset + i * ratio);
-      const end = Math.min(frame.length, Math.floor(resampleOffset + (i + 1) * ratio));
-      let acc = 0;
-      for (let j = start; j < end; j++) acc += frame[j];
-      const sample = Math.max(-1, Math.min(1, acc / Math.max(1, end - start)));
-      out[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+    if (out.length) chunks.push(Int16Array.from(out));
+  }
+
+  async function refreshDevices() {
+    try {
+      const list = await navigator.mediaDevices.enumerateDevices();
+      devices.value = list
+        .filter((d) => d.kind === "audioinput")
+        .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `麦克风 ${i + 1}` }));
+    } catch (e) {
+      devices.value = [];
     }
-    resampleOffset = resampleOffset + outLength * ratio - frame.length;
-    chunks.push(out);
+    const track = stream?.getAudioTracks()[0];
+    deviceLabel.value = track?.label || "";
+    const active = track?.getSettings().deviceId;
+    if (active) deviceId.value = active;
+  }
+
+  // 切换麦克风：重新打开音频链路
+  async function selectDevice(id: string): Promise<boolean> {
+    if (recording.value) return false;
+    saveDevice(id);
+    deviceId.value = id;
+    dispose();
+    return init();
+  }
+
+  // 浏览器要求用户操作后才能启动音频；在点击事件里调用
+  async function resume() {
+    if (audioContext?.state === "suspended") {
+      await audioContext.resume().catch(() => undefined);
+    }
+  }
+
+  function resetPeak() {
+    peakLevel.value = 0;
   }
 
   async function init(): Promise<boolean> {
     if (ready.value) return true;
     error.value = "";
     try {
-      stream = await requestMicrophone();
+      stream = await requestMicrophone(deviceId.value);
       audioContext = new AudioContext();
       source = audioContext.createMediaStreamSource(stream);
       try {
@@ -144,6 +229,7 @@ export function useAudioRecorder() {
         muteNode.connect(audioContext.destination);
       }
       ready.value = true;
+      await refreshDevices();
       return true;
     } catch (e) {
       error.value = e instanceof Error && e.message ? e.message : "无法打开麦克风，请允许浏览器麦克风权限后重试。";
@@ -154,11 +240,12 @@ export function useAudioRecorder() {
 
   async function start(): Promise<boolean> {
     if (!ready.value && !(await init())) return false;
-    if (audioContext?.state === "suspended") {
-      await audioContext.resume().catch(() => undefined);
-    }
+    await resume();
     chunks = [];
-    resampleOffset = 0;
+    resampleAcc = 0;
+    resampleCount = 0;
+    resamplePos = 0;
+    peakLevel.value = 0;
     recording.value = true;
     return true;
   }
@@ -194,5 +281,21 @@ export function useAudioRecorder() {
 
   onUnmounted(dispose);
 
-  return { init, start, stop, dispose, ready, recording, error, volumeLevel };
+  return {
+    init,
+    start,
+    stop,
+    dispose,
+    resume,
+    resetPeak,
+    selectDevice,
+    ready,
+    recording,
+    error,
+    volumeLevel,
+    peakLevel,
+    devices,
+    deviceId,
+    deviceLabel,
+  };
 }

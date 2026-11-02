@@ -44,6 +44,14 @@ class WavUtilsTest {
         assertThatThrownBy(() -> WavUtils.parse(new byte[10])).isInstanceOf(IllegalArgumentException.class);
     }
 
+    @Test
+    void measuresPeakLevel() {
+        byte[] silent = wav(16000, 1.0, false);
+        assertThat(WavUtils.peakLevel(silent)).isZero();
+        ByteBuffer.wrap(silent).order(ByteOrder.LITTLE_ENDIAN).putShort(44 + 200, (short) -16384);
+        assertThat(WavUtils.peakLevel(silent)).isEqualTo(0.5);
+    }
+
     static byte[] wav(int sampleRate, double seconds, boolean placeholderLength) {
         int dataLength = (int) (sampleRate * 2 * seconds);
         ByteBuffer buffer = ByteBuffer.allocate(44 + dataLength).order(ByteOrder.LITTLE_ENDIAN);

@@ -91,6 +91,23 @@ public final class WavUtils {
         return chunks;
     }
 
+    /**
+     * 录音的峰值电平（0～1）。只支持 16bit PCM，其它格式返回 1，即不做静音判断。
+     */
+    public static double peakLevel(byte[] wav) {
+        WavInfo info = parse(wav);
+        if (info.bitsPerSample() != 16) {
+            return 1;
+        }
+        ByteBuffer buffer = ByteBuffer.wrap(wav).order(ByteOrder.LITTLE_ENDIAN);
+        int peak = 0;
+        int end = info.dataOffset() + info.dataLength() - 1;
+        for (int pos = info.dataOffset(); pos < end; pos += 2) {
+            peak = Math.max(peak, Math.abs((int) buffer.getShort(pos)));
+        }
+        return peak / 32768.0;
+    }
+
     private static byte[] build(byte[] source, int offset, int length, WavInfo info) {
         int blockAlign = info.channels() * info.bitsPerSample() / 8;
         ByteBuffer out = ByteBuffer.allocate(HEADER_SIZE + length).order(ByteOrder.LITTLE_ENDIAN);
