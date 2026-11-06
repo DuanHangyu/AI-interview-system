@@ -137,7 +137,17 @@ public class ExamSessionService {
             po.setEndTime(s.getEndTime());
             po.setLocation(StringUtils.trimToNull(s.getLocation()));
             po.setParticipantLimit(s.getCapacity());
-            sessionService.saveOrUpdate(po);
+            if (po.getId() == null) {
+                sessionService.save(po);
+            } else {
+                // updateById 会跳过空字段，清空人数上限、地点时必须显式写入 null
+                sessionService.update(Wrappers.lambdaUpdate(AssessmentAppointmentSettingPO.class)
+                        .set(AssessmentAppointmentSettingPO::getTimePeriod, po.getTimePeriod())
+                        .set(AssessmentAppointmentSettingPO::getEndTime, po.getEndTime())
+                        .set(AssessmentAppointmentSettingPO::getLocation, po.getLocation())
+                        .set(AssessmentAppointmentSettingPO::getParticipantLimit, po.getParticipantLimit())
+                        .eq(AssessmentAppointmentSettingPO::getId, po.getId()));
+            }
             // 旧代码按开始时间关联学生，保持同步
             assignmentService.update(Wrappers.lambdaUpdate(StudentAssessmentAppointmentPO.class)
                     .set(StudentAssessmentAppointmentPO::getTimePeriod, po.getTimePeriod())

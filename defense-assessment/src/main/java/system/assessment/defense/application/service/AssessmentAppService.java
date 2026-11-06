@@ -152,13 +152,8 @@ public class AssessmentAppService {
         assessmentInviteService.remove(Wrappers.lambdaQuery(AssessmentInvitePO.class)
                 .eq(AssessmentInvitePO::getAssessmentId, assessmentSetting.getId()));
         saveRelationStudent(modifyCmd.getInviteTeachers(), modifyCmd.getId(), teacherId, modifyCmd.getStudentIds(), modifyCmd.getSchoolClassList());
-        // 如果之前是需要预约的，改成了非预约的，则需要把预约设置和学生的预约信息都删除
-        if (Objects.equals(assessmentSetting.getNeedAppoint(), true) && Objects.equals(modifyCmd.getNeedAppoint(), false)) {
-            appointmentSettingService.remove(Wrappers.lambdaQuery(AssessmentAppointmentSettingPO.class)
-                    .eq(AssessmentAppointmentSettingPO::getAssessmentId, assessmentSetting.getId()));
-            studentAssessmentAppointmentService.remove(Wrappers.lambdaQuery(StudentAssessmentAppointmentPO.class)
-                    .eq(StudentAssessmentAppointmentPO::getAssessmentId, assessmentSetting.getId()));
-        }
+        // 是否分场次由考场页的场次设置决定（ExamSessionService），编辑面试时不改动，避免用打开页面时的旧值覆盖或删除场次
+        participatingStudents.setNeedAppoint(null);
         questionBankService.saveQuestions(id, modifyCmd.getQuestions());
         publisher.publishEvent(new SettingCreateOrUpdateEvent(OBJECT, participatingStudents));
         return assessmentSettingService.updateById(participatingStudents);

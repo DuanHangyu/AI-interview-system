@@ -79,7 +79,7 @@ public class StudyRecordService {
     @Transactional(readOnly = true)
     public IPage<StudyRecordDTO> recordList(StudyRecordPagingQuery query) {
         int page = Optional.ofNullable(query.getPage()).filter(p -> p > 0).orElse(1);
-        int size = Optional.ofNullable(query.getSize()).filter(s -> s > 0 && s <= 200).orElse(20);
+        int size = Math.min(Optional.ofNullable(query.getSize()).filter(s -> s > 0).orElse(20), 200);
         List<RecordRow> rows = filteredRows(query);
         Page<StudyRecordDTO> result = new Page<>(page, size, rows.size());
         result.setRecords(rows.stream().skip((long) (page - 1) * size).limit(size).map(RecordRow::toDTO).toList());

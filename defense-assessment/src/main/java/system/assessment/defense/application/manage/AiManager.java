@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import system.assessment.defense.application.dto.AssessmentEvaluationDTO;
 import system.assessment.defense.application.dto.FollowUpItemDTO;
 import system.assessment.defense.application.dto.QuestionItemDTO;
+import system.assessment.defense.infrastructure.common.StrayEnglishFixer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -326,7 +327,7 @@ public class AiManager {
                 systemPrompt, promptWithMaterial, "evaluation_result", schemaJson);
         log.info("summaryAnalysis schemaType:{}, cost:{}ms, length:{}", schemaType,
                 System.currentTimeMillis() - start, resultText.length());
-        AssessmentEvaluationDTO results = JSONUtil.toBean(stripCodeFence(resultText), AssessmentEvaluationDTO.class);
+        AssessmentEvaluationDTO results = JSONUtil.toBean(StrayEnglishFixer.fix(stripCodeFence(resultText)), AssessmentEvaluationDTO.class);
         results.verifyIntegrity();
         return results;
     }
@@ -349,7 +350,7 @@ public class AiManager {
                 systemPrompt, promptWithMaterial, "rubric_evaluation", schemaJson);
         log.info("rubricAnalysis defense:{}, cost:{}ms, length:{}", withDefense,
                 System.currentTimeMillis() - start, resultText.length());
-        return JSONUtil.toBean(stripCodeFence(resultText), AssessmentEvaluationDTO.class);
+        return JSONUtil.toBean(StrayEnglishFixer.fix(stripCodeFence(resultText)), AssessmentEvaluationDTO.class);
     }
 
     /**
