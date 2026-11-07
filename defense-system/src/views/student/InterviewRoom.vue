@@ -361,6 +361,8 @@ const assessmentId = computed(() => String(route.query?.id || ""));
 const recorder = useAudioRecorder();
 const auth = useAuthStore();
 const uploadRetryText = ref("");
+const audioLoading = ref(false);
+let prefetchedAudio: { key: string; promise: Promise<Blob> } | null = null;
 
 const state = ref<InterviewState | null>(null);
 const stage = ref<Stage>("loading");
@@ -440,7 +442,7 @@ const actionDisabled = computed(() => {
 const phaseText = computed(() => {
   switch (questionPhase.value) {
     case "playing":
-      return "面试官正在提问";
+      return audioLoading.value ? "正在加载题目语音…" : "面试官正在提问";
     case "recording":
       return "正在录音，请作答";
     case "uploading":
@@ -616,6 +618,8 @@ function applyState(next: InterviewState) {
       if (!drawingShown && next.answeredCount === 0 && !next.current?.followUp) {
         drawingShown = true;
         stage.value = "drawing";
+        // 抽题动画期间就开始下载第一题语音，动画结束时基本已下载好（题目已抽定，不涉及泄题）
+        if (next.current) prefetchQuestionAudio(next.current.index, next.current.followIndex || 0);
         setTimeout(() => {
           if (pageOff) return;
           stage.value = "question";
@@ -905,6 +909,27 @@ async function fetchQuestionAudio(index: number, followIndex: number): Promise<B
   return blob;
 }
 
+function prefetchQuestionAudio(index: number, followIndex: number): Promise<Blob> {
+  const key = `${index}-${followIndex}`;
+  if (prefetchedAudio?.key !== key) {
+    const promise = fetchQuestionAudio(index, followIndex);
+    promise.catch(() => undefined);
+    prefetchedAudio = { key, promise };
+  }
+  return prefetchedAudio.promise;
+}
+
+// 取当前题目语音：优先用抽题时已开始下载的那份
+async function loadQuestionAudio(index: number, followIndex: number): Promise<Blob> {
+  audioLoading.value = true;
+  try {
+    return await prefetchQuestionAudio(index, followIndex);
+  } finally {
+    prefetchedAudio = null;
+    audioLoading.value = false;
+  }
+}
+
 // 播报当前题目（失败时逐级降级，绝不阻塞面试），随后开始作答
 async function askCurrent() {
   const current = state.value?.current;
@@ -916,7 +941,7 @@ async function askCurrent() {
   countdownTotal.value = state.value?.answerTime || 0;
   countdown.value = countdownTotal.value;
   try {
-    const blob = await fetchQuestionAudio(current.index, current.followIndex || 0);
+    const blob = await loadQuestionAudio(current.index, current.followIndex || 0);
     if (askedSlotKey !== slotKey || questionPhase.value !== "playing") return;
     await playBlob(blob);
   } catch (audioError) {
