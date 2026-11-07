@@ -59,28 +59,52 @@
           </li>
           <li>每道题先语音播报，播报结束后自动开始录音；作答满 {{ MIN_RECORD_SECONDS }} 秒后可提前结束。</li>
           <li>回答提交后不可修改。中途刷新或断网不会丢失已提交的回答，重新进入即可继续。</li>
-          <li>请在安静的环境中作答，建议佩戴耳机，避免题目播报被麦克风录入。</li>
+          <li>请在安静的环境中作答，全程佩戴耳机，避免题目播报被麦克风录入。</li>
+          <li>开始前请完成右侧的<b>麦克风</b>和<b>耳机</b>检测，两项都确认后才能开始面试。</li>
         </ol>
         <div v-if="gate.text" class="gate" :class="{ 'is-locked': gate.locked }">
           <ClockCircleOutlined />
           <span>{{ gate.text }}</span>
         </div>
         <div class="intro-actions">
-          <Button type="primary" size="large" :loading="busy" :disabled="gate.locked" @click="confirmBegin">
-            {{ gate.locked && gate.countdown ? `${gate.countdown} 后可开始` : "开始面试" }}
+          <Button
+            type="primary"
+            size="large"
+            :loading="busy"
+            :disabled="gate.locked || !devicesChecked"
+            @click="confirmBegin"
+          >
+            {{
+              !devicesChecked
+                ? "请先完成右侧设备检测"
+                : gate.locked && gate.countdown
+                ? `${gate.countdown} 后可开始`
+                : "开始面试"
+            }}
           </Button>
           <Button size="large" @click="router.replace('/student/interviews')">稍后再来</Button>
         </div>
       </section>
       <aside class="panel-side">
         <div class="panel">
-          <div class="panel-label">麦克风检测</div>
-          <div class="mic mt-0">
+          <div class="panel-label check-label">
+            <span>考前设备检测</span>
+            <span :class="devicesChecked ? 'text-ok' : 'muted'">已完成 {{ checkedCount }} / 2</span>
+          </div>
+
+          <!-- 1. 麦克风：录一段，回放给自己听 -->
+          <div class="check-item" :class="{ 'is-done': micConfirmed }">
+            <div class="check-head">
+              <span class="check-no"><CheckOutlined v-if="micConfirmed" /><template v-else>1</template></span>
+              <span class="check-title">麦克风</span>
+              <span v-if="micConfirmed" class="check-state text-ok">已确认</span>
+            </div>
+            <p class="check-desc">
+              点击“试录一段”，报出你的姓名和学号，{{ MIC_TEST_SECONDS }} 秒后自动回放，确认能清楚听到自己的声音。
+            </p>
             <div class="mic-head">
-              <span><AudioOutlined /> 麦克风</span>
-              <span :class="micHeard ? 'text-ok' : 'text-warn'">
-                {{ micHeard ? "检测正常" : "请对着麦克风说一句话" }}
-              </span>
+              <span class="check-device"><AudioOutlined /> {{ recorder.deviceLabel.value || "默认麦克风" }}</span>
+              <span v-if="micTest.phase === 'recording'" class="text-warn">录音中 {{ micTest.left }} 秒</span>
             </div>
             <div class="meter"><i :style="{ width: meterWidth }"></i></div>
             <Select
@@ -88,10 +112,58 @@
               class="w-full mt-3"
               :value="recorder.deviceId.value"
               :options="deviceOptions"
-              :disabled="busy"
+              :disabled="busy || micTest.phase !== 'idle'"
               @change="onDeviceSelect"
             />
-            <div v-else class="mt-2 text-xs muted">{{ recorder.deviceLabel.value || "默认麦克风" }}</div>
+            <div class="check-actions">
+              <Button v-if="micTest.phase === 'recording'" danger @click="stopMicTest">结束试录</Button>
+              <Button v-else-if="micTest.phase === 'playing'" disabled>正在回放你的录音…</Button>
+              <Button v-else :type="micTest.url ? 'default' : 'primary'" :disabled="busy" @click="startMicTest">
+                {{ micTest.url ? "重新试录" : "试录一段" }}
+              </Button>
+              <Button v-if="micTest.url && micTest.phase === 'idle'" @click="playMicTest">再听一遍</Button>
+            </div>
+            <div v-if="micTest.url && micTest.phase === 'idle' && !micConfirmed" class="check-ask">
+              <template v-if="micTest.heard">
+                <span>回放时能清楚听到自己的声音吗？</span>
+                <div class="check-ask-actions">
+                  <Button type="primary" size="small" @click="micConfirmed = true">能听清</Button>
+                  <Button size="small" @click="micTest.trouble = true">听不清</Button>
+                </div>
+              </template>
+              <div v-else class="check-warn">
+                没有录到声音。请检查麦克风是否被静音、上方是否选对了麦克风，然后点击“重新试录”。
+              </div>
+              <div v-if="micTest.trouble && micTest.heard" class="check-warn">
+                请把麦克风靠近嘴边、说话声音大一些；用耳机麦克风时确认选的是耳机，然后重新试录。
+              </div>
+            </div>
+          </div>
+
+          <!-- 2. 耳机：播放一段测试语音 -->
+          <div class="check-item" :class="{ 'is-done': speakerConfirmed }">
+            <div class="check-head">
+              <span class="check-no"><CheckOutlined v-if="speakerConfirmed" /><template v-else>2</template></span>
+              <span class="check-title">耳机</span>
+              <span v-if="speakerConfirmed" class="check-state text-ok">已确认</span>
+            </div>
+            <p class="check-desc">戴好耳机，点击“播放测试声音”，确认能清楚听到。面试题目会以同样的方式播报。</p>
+            <div class="check-actions">
+              <Button v-if="speakerTest.playing" @click="stopSpeakerTest">停止播放</Button>
+              <Button v-else :type="speakerTest.played ? 'default' : 'primary'" @click="playSpeakerTest">
+                {{ speakerTest.played ? "重新播放" : "播放测试声音" }}
+              </Button>
+            </div>
+            <div v-if="speakerTest.played && !speakerConfirmed" class="check-ask">
+              <span>能清楚听到测试声音吗？</span>
+              <div class="check-ask-actions">
+                <Button type="primary" size="small" @click="speakerConfirmed = true">能听到</Button>
+                <Button size="small" @click="speakerTest.trouble = true">听不到</Button>
+              </div>
+              <div v-if="speakerTest.trouble" class="check-warn">
+                请检查：耳机是否插好；电脑音量是否调大、没有静音；电脑右下角的声音输出是否选择了这副耳机。调整后点击“重新播放”。
+              </div>
+            </div>
           </div>
         </div>
       </aside>
@@ -231,7 +303,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { Button, Modal, Select, Spin, message } from "ant-design-vue";
 import {
@@ -257,6 +329,7 @@ import { clearPending, loadPending, recordingKey, removePending, savePending } f
 import { useAuthStore } from "@/stores/auth";
 import { BRAND } from "@/config/brand";
 import logoBlue from "@/assets/brand/logo-marx-blue.png";
+import speakerTestAudio from "@/assets/speaker-test.wav";
 
 type Stage = "loading" | "intro" | "defense" | "drawing" | "question" | "submitting" | "done";
 type QuestionPhase = "idle" | "playing" | "recording" | "uploading";
@@ -406,6 +479,8 @@ async function onDeviceChange(event: Event) {
       message.error(recorder.error.value || "切换麦克风失败");
     }
     recorder.resetPeak();
+    // 换了麦克风要重新试录确认
+    micConfirmed.value = false;
   } finally {
     busy.value = false;
   }
@@ -558,19 +633,104 @@ function applyState(next: InterviewState) {
   }
 }
 
-function confirmBegin() {
-  if (busy.value) return;
-  if (micHeard.value) {
-    beginInterview();
+// ---------------- 考前设备检测 ----------------
+// 麦克风试录后回放、耳机播放测试语音，两项都由学生亲自确认后才能开始面试
+const MIC_TEST_SECONDS = 5;
+const micConfirmed = ref(false);
+const speakerConfirmed = ref(false);
+const micTest = reactive({ phase: "idle" as "idle" | "recording" | "playing", left: 0, url: "", heard: false, trouble: false });
+const speakerTest = reactive({ playing: false, played: false, trouble: false });
+const devicesChecked = computed(() => micConfirmed.value && speakerConfirmed.value);
+const checkedCount = computed(() => Number(micConfirmed.value) + Number(speakerConfirmed.value));
+let micTestTimer: number | undefined;
+let checkAudio: HTMLAudioElement | null = null;
+
+function stopCheckAudio() {
+  if (checkAudio) {
+    checkAudio.onended = null;
+    checkAudio.onerror = null;
+    checkAudio.pause();
+    checkAudio = null;
+  }
+  if (micTest.phase === "playing") micTest.phase = "idle";
+  speakerTest.playing = false;
+}
+
+function playCheckAudio(src: string, onDone: () => void) {
+  stopCheckAudio();
+  const audio = new Audio(src);
+  checkAudio = audio;
+  audio.onended = audio.onerror = () => {
+    if (checkAudio === audio) checkAudio = null;
+    onDone();
+  };
+  audio.play().catch(() => {
+    if (checkAudio === audio) checkAudio = null;
+    onDone();
+  });
+}
+
+async function startMicTest() {
+  stopCheckAudio();
+  micConfirmed.value = false;
+  micTest.trouble = false;
+  if (!(await recorder.start())) {
+    showMicError();
     return;
   }
-  Modal.confirm({
-    title: "还没有检测到你的声音",
-    content: "请确认麦克风没有被静音、选择了正确的设备，然后对着麦克风说一句话。确定要直接开始吗？",
-    okText: "仍然开始",
-    cancelText: "再检测一下",
-    onOk: beginInterview,
+  micTest.phase = "recording";
+  micTest.left = MIC_TEST_SECONDS;
+  clearInterval(micTestTimer);
+  micTestTimer = window.setInterval(() => {
+    micTest.left -= 1;
+    if (micTest.left <= 0) stopMicTest();
+  }, 1000);
+}
+
+async function stopMicTest() {
+  if (micTest.phase !== "recording") return;
+  clearInterval(micTestTimer);
+  micTest.phase = "idle";
+  const blob = await recorder.stop();
+  micTest.heard = recorder.peakLevel.value >= SILENCE_PEAK;
+  if (micTest.url) URL.revokeObjectURL(micTest.url);
+  micTest.url = URL.createObjectURL(blob);
+  playMicTest();
+}
+
+function playMicTest() {
+  if (!micTest.url) return;
+  playCheckAudio(micTest.url, () => {
+    if (micTest.phase === "playing") micTest.phase = "idle";
   });
+  micTest.phase = "playing";
+}
+
+function playSpeakerTest() {
+  speakerConfirmed.value = false;
+  speakerTest.trouble = false;
+  playCheckAudio(speakerTestAudio, () => {
+    speakerTest.playing = false;
+  });
+  speakerTest.playing = true;
+  speakerTest.played = true;
+}
+
+function stopSpeakerTest() {
+  stopCheckAudio();
+}
+
+function disposeDeviceCheck() {
+  clearInterval(micTestTimer);
+  stopCheckAudio();
+  if (micTest.url) URL.revokeObjectURL(micTest.url);
+  micTest.url = "";
+}
+
+function confirmBegin() {
+  if (busy.value || !devicesChecked.value) return;
+  disposeDeviceCheck();
+  beginInterview();
 }
 
 async function beginInterview() {
@@ -922,6 +1082,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   pageOff = true;
+  disposeDeviceCheck();
   clearCountdown();
   clearInterval(clockTimer);
   stopQuestionAudio();
@@ -1308,6 +1469,90 @@ function onDeviceSelect(value: unknown) {
 
 .text-warn {
   color: var(--c-warning);
+}
+
+.check-label {
+  display: flex;
+  justify-content: space-between;
+}
+
+.check-item {
+  padding: 14px 0 16px;
+  border-top: 1px solid var(--c-border-2);
+}
+
+.check-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.check-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--c-primary);
+  color: var(--c-primary);
+  font-size: 12px;
+}
+
+.check-item.is-done .check-no {
+  border-color: var(--c-success);
+  background: var(--c-success);
+  color: #fff;
+}
+
+.check-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.check-state {
+  margin-left: auto;
+  font-size: 13px;
+}
+
+.check-desc {
+  margin: 8px 0 10px;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--c-text-2);
+}
+
+.check-device {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.check-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.check-ask {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: var(--c-primary-soft);
+  font-size: 13px;
+}
+
+.check-ask-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.check-warn {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 20px;
+  color: #8a5a00;
 }
 
 .meter {
