@@ -126,6 +126,10 @@ service.interceptors.response.use(
   },
   (error) => {
     console.log("err" + error);
+    // 面试页的请求都有自动重试和页面内提示（录音补交、语音降级为朗读），不再弹全局报错吓到考生
+    if (String(error.config?.url || "").startsWith("/front/interview/")) {
+      return Promise.reject(error);
+    }
     let { message: msg } = error;
     if (msg == "Network Error") {
       msg = "后端接口连接异常";

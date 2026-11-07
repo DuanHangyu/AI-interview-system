@@ -135,6 +135,12 @@
             <artifactId>poi-ooxml-lite</artifactId>
             <version>5.4.0</version>
         </dependency>
+        <!-- 题目播报音频转 MP3，减小考生下载量 -->
+        <dependency>
+            <groupId>de.sciss</groupId>
+            <artifactId>jump3r</artifactId>
+            <version>1.0.5</version>
+        </dependency>
         <dependency>
             <groupId>com.aliyun.oss</groupId>
             <artifactId>aliyun-sdk-oss</artifactId>

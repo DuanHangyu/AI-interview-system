@@ -126,6 +126,6 @@ export function getQuestionAudio(
     method: "get",
     params: { assessmentId, index, followUp: followIndex > 0, followIndex },
     responseType: "blob",
-    timeout: 8000,
+    timeout: 20000,
   });
 }

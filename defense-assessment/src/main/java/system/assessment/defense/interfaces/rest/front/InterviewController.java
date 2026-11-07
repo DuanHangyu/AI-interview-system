@@ -15,6 +15,7 @@ import org.springframework.web.multipart.MultipartFile;
 import system.assessment.defense.application.dto.interview.InterviewCmd;
 import system.assessment.defense.application.dto.interview.InterviewStateDTO;
 import system.assessment.defense.application.service.interview.InterviewService;
+import system.assessment.defense.infrastructure.common.Mp3Encoder;
 
 import java.io.IOException;
 
@@ -72,12 +73,13 @@ public class InterviewController {
                               @RequestParam(value = "followUp", defaultValue = "false") boolean followUp,
                               @RequestParam(value = "followIndex", required = false) Integer followIndex,
                               HttpServletResponse response) throws IOException {
-        byte[] audio = interviewService.questionAudio(StpUtil.getLoginIdAsInt(), assessmentId, index,
+        byte[] wav = interviewService.questionAudio(StpUtil.getLoginIdAsInt(), assessmentId, index,
                 followIndex(followUp, followIndex));
-        response.setContentType("audio/wav");
+        Mp3Encoder.Audio audio = Mp3Encoder.fromWav(wav);
+        response.setContentType(audio.contentType());
         response.setHeader("Cache-Control", "private, max-age=600");
-        response.setContentLength(audio.length);
-        response.getOutputStream().write(audio);
+        response.setContentLength(audio.data().length);
+        response.getOutputStream().write(audio.data());
     }
 
     /**

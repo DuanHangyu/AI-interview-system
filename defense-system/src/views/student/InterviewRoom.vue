@@ -329,7 +329,7 @@ import { clearPending, loadPending, recordingKey, removePending, savePending } f
 import { useAuthStore } from "@/stores/auth";
 import { BRAND } from "@/config/brand";
 import logoBlue from "@/assets/brand/logo-marx-blue.png";
-import speakerTestAudio from "@/assets/speaker-test.wav";
+import speakerTestAudio from "@/assets/speaker-test.mp3";
 
 type Stage = "loading" | "intro" | "defense" | "drawing" | "question" | "submitting" | "done";
 type QuestionPhase = "idle" | "playing" | "recording" | "uploading";
@@ -349,7 +349,8 @@ const MIN_RECORD_SECONDS = 3;
 const UPLOAD_ATTEMPTS = 3;
 // 录音上传自动重试的间隔（毫秒），合计约 1 分钟；仍失败再让学生手动重试，录音始终保留在本机
 const UPLOAD_RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000];
-const AUDIO_FETCH_TIMEOUT = 8000;
+// 题目语音下载超时（毫秒）；超时后改用浏览器朗读，不影响作答
+const AUDIO_FETCH_TIMEOUT = 20000;
 
 const md = new MarkdownIt().use(hljs);
 const renderMarkdown = (text: string) => md.render(text || "");
@@ -455,6 +456,8 @@ const progressHint = computed(() => {
 });
 
 function getErrorMessage(error: unknown, fallback: string) {
+  // 网络错误、超时的原始信息是英文（如 timeout of 20000ms exceeded），统一用中文提示
+  if (isNetworkError(error)) return fallback;
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
