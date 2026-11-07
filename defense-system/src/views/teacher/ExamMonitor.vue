@@ -10,6 +10,27 @@
       </div>
       <Space>
         <span class="muted text-[13px]">服务器时间 <span class="num">{{ clock }}</span></span>
+        <template v-if="monitor">
+          <Tag v-if="monitor.showResult" color="success">成绩已公布</Tag>
+          <Tag v-else>成绩未公布</Tag>
+          <Popconfirm
+            v-if="!monitor.showResult"
+            :title="`公布后，${monitor.counts.DONE || 0} 名已完成的学生可以查看自己的分数和报告；之后完成的学生出分后也能立即查看。请先在面试记录中核对成绩。确定公布吗？`"
+            ok-text="公布成绩"
+            :overlay-style="{ maxWidth: '360px' }"
+            @confirm="toggleShowResult(true)"
+          >
+            <Button type="primary" :loading="publishing">向学生公布成绩</Button>
+          </Popconfirm>
+          <Popconfirm
+            v-else
+            title="收回后学生将看不到分数和报告，确定收回吗？"
+            ok-text="收回"
+            @confirm="toggleShowResult(false)"
+          >
+            <Button :loading="publishing">收回成绩</Button>
+          </Popconfirm>
+        </template>
         <Button @click="router.push({ path: '/records', query: { assessmentId } })">面试记录</Button>
       </Space>
     </div>
@@ -232,6 +253,7 @@ import {
   autoAssignExam,
   getExamMonitor,
   saveExamSessions,
+  setExamShowResult,
   type ExamMonitor,
   type ExamSession,
   type ExamStatus,
@@ -245,6 +267,7 @@ const assessmentId = Number(route.params.id);
 
 const monitor = ref<ExamMonitor | null>(null);
 const loading = ref(false);
+const publishing = ref(false);
 const tab = ref<"students" | "sessions">("students");
 const selected = ref<number[]>([]);
 const autoRefresh = ref(true);
@@ -398,6 +421,17 @@ async function autoAssign() {
   const res: any = await autoAssignExam(assessmentId);
   message.success(`已自动安排 ${res.data.assigned} 人`);
   load(true);
+}
+
+async function toggleShowResult(show: boolean) {
+  publishing.value = true;
+  try {
+    await setExamShowResult(assessmentId, show);
+    message.success(show ? "成绩已公布，学生现在可以查看报告" : "已收回，学生暂时看不到成绩");
+    await load(true);
+  } finally {
+    publishing.value = false;
+  }
 }
 
 async function retake(r: ExamStudentRow) {

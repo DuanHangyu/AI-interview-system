@@ -83,6 +83,17 @@ public final class ExamDTO {
     }
 
     @Data
+    @Schema(description = "向学生公布或收回成绩报告")
+    public static class ShowResultCmd {
+
+        @NotNull
+        private Integer assessmentId;
+
+        @NotNull
+        private Boolean showResult;
+    }
+
+    @Data
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
@@ -113,6 +124,9 @@ public final class ExamDTO {
         private Integer totalScore;
 
         private Integer passScore;
+
+        @Schema(description = "学生能否查看成绩报告")
+        private Boolean showResult;
 
         @JsonFormat(pattern = TIME)
         private LocalDateTime serverTime;

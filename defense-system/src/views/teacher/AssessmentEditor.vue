@@ -250,13 +250,9 @@
               </template>
             </template>
           </FormItem>
-          <FormItem class="mb-0">
-            <div class="flex items-center gap-3">
-              <Switch v-model:checked="form.showResult" />
-              <span>学生可以查看面试报告</span>
-              <span class="muted text-[13px]">关闭后，报告只有教师可见</span>
-            </div>
-          </FormItem>
+          <p class="muted text-[13px] mb-0">
+            学生交卷后先只有老师能看到成绩。老师在面试记录中核对无误后，到“考场”页点击“向学生公布成绩”，学生才能查看分数和报告。
+          </p>
         </section>
 
         <!-- 参与人员 -->
@@ -587,7 +583,7 @@ const form = reactive({
   totalScore: 100 as number | undefined,
   passScore: 60 as number | undefined,
   assessmentCriteria: "",
-  showResult: true,
+  showResult: false,
   needAppoint: false,
   picked: [] as string[],
   inviteTeachers: [] as number[],

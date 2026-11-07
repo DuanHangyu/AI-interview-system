@@ -48,6 +48,8 @@ export interface ExamMonitor {
   bySession: boolean;
   totalScore?: number;
   passScore?: number;
+  /** 学生能否查看成绩报告 */
+  showResult?: boolean;
   serverTime: string;
   sessions: ExamSession[];
   counts: Record<ExamStatus, number>;
@@ -97,6 +99,11 @@ export function autoAssignExam(assessmentId: number) {
 // 考场监控
 export function getExamMonitor(assessmentId: number) {
   return request({ url: "/backend/exam/monitor", method: "get", params: { assessmentId } });
+}
+
+// 向学生公布或收回成绩报告
+export function setExamShowResult(assessmentId: number, showResult: boolean) {
+  return request({ url: "/backend/exam/show-result", method: "post", data: { assessmentId, showResult } });
 }
 
 // 学生：我的面试

@@ -65,7 +65,7 @@
             <span class="muted"> / 及格 {{ record.passScore ?? "—" }}</span>
           </template>
           <template v-else-if="column.key === 'result'">
-            <span :class="record.showResult ? '' : 'muted'">{{ record.showResult ? "可查看" : "不可查看" }}</span>
+            <span :class="record.showResult ? '' : 'muted'">{{ record.showResult ? "已公布" : "未公布" }}</span>
           </template>
           <template v-else-if="column.key === 'action'">
             <Space :size="4">
@@ -113,7 +113,7 @@ const columns = [
   { title: "参与学生", key: "students", width: 90 },
   { title: "场次", key: "appoint", width: 100 },
   { title: "满分 / 及格", key: "score", width: 110 },
-  { title: "学生报告", key: "result", width: 90 },
+  { title: "成绩公布", key: "result", width: 90 },
   { title: "操作", key: "action", width: 200, fixed: "right" as const },
 ];
 

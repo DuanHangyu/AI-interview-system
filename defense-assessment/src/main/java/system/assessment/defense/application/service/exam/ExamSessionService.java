@@ -94,6 +94,21 @@ public class ExamSessionService {
         return setting;
     }
 
+    // ------------------------------------------------------------------ 成绩公布
+
+    /**
+     * 老师核对完成绩后再向学生公布；公布前学生端接口不返回分数和评语
+     */
+    public Boolean showResult(ExamDTO.ShowResultCmd cmd) {
+        checkAccess(cmd.getAssessmentId());
+        settingService.update(Wrappers.lambdaUpdate(AssessmentSettingPO.class)
+                .set(AssessmentSettingPO::getShowResult, cmd.getShowResult())
+                .eq(AssessmentSettingPO::getId, cmd.getAssessmentId()));
+        log.info("show result changed, assessmentId:{}, showResult:{}, by:{}",
+                cmd.getAssessmentId(), cmd.getShowResult(), StpUtil.getLoginIdAsInt());
+        return true;
+    }
+
     // ------------------------------------------------------------------ 场次
 
     public List<ExamDTO.Session> listSessions(Integer assessmentId) {
@@ -366,6 +381,7 @@ public class ExamSessionService {
                 .bySession(bySession)
                 .totalScore(setting.getTotalScore())
                 .passScore(setting.getPassScore())
+                .showResult(Boolean.TRUE.equals(setting.getShowResult()))
                 .serverTime(now)
                 .sessions(toSessionDTOs(sessions, assignments))
                 .counts(counts)

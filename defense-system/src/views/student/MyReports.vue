@@ -28,7 +28,7 @@
           <template v-else-if="column.key === 'state'">
             <Badge v-if="record.status === 'ANALYZING'" status="processing" text="评分中" />
             <Badge v-else-if="record.showResult" status="success" text="已出报告" />
-            <Badge v-else status="default" text="老师未开放报告" />
+            <Badge v-else status="default" text="成绩待老师公布" />
           </template>
           <template v-else-if="column.key === 'action'">
             <Space v-if="record.status === 'DONE' && record.showResult">

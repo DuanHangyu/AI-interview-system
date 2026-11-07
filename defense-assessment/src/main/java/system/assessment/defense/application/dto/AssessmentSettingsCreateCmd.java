@@ -107,7 +107,8 @@ public class AssessmentSettingsCreateCmd {
                 .passScore(passScore)
                 .defense(defense)
                 .question(question)
-                .showResult(showResult)
+                // 新建的面试默认不向学生公布成绩，老师核对后在考场页公布
+                .showResult(false)
                 .needAppoint(needAppoint)
                 .createId(StpUtil.getLoginIdAsInt())
                 .build();

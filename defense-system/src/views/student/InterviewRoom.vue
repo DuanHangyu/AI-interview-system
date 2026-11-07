@@ -36,10 +36,9 @@
       <div class="done-card">
         <CheckCircleFilled class="done-icon" />
         <h2>面试已提交</h2>
-        <p class="muted">系统正在转写录音并生成面试报告，通常需要 1～3 分钟。</p>
+        <p class="muted">你的全部回答录音已经保存到服务器。成绩由老师核对后统一公布，公布后可在“我的面试”中查看报告。</p>
         <div class="mt-6 flex justify-center gap-3">
-          <Button @click="router.replace('/student/interviews')">返回我的面试</Button>
-          <Button type="primary" @click="router.replace(`/student/reports/${assessmentId}`)">查看面试报告</Button>
+          <Button type="primary" @click="router.replace('/student/interviews')">返回我的面试</Button>
         </div>
       </div>
     </div>
@@ -254,6 +253,8 @@ import {
   uploadDefenseAudio,
 } from "@/api/interview";
 import { SILENCE_PEAK, useAudioRecorder } from "@/composables/useAudioRecorder";
+import { clearPending, loadPending, recordingKey, removePending, savePending } from "@/utils/pendingRecordings";
+import { useAuthStore } from "@/stores/auth";
 import { BRAND } from "@/config/brand";
 import logoBlue from "@/assets/brand/logo-marx-blue.png";
 
@@ -273,6 +274,8 @@ interface Blocking {
 
 const MIN_RECORD_SECONDS = 3;
 const UPLOAD_ATTEMPTS = 3;
+// 录音上传自动重试的间隔（毫秒），合计约 1 分钟；仍失败再让学生手动重试，录音始终保留在本机
+const UPLOAD_RETRY_DELAYS = [1000, 2000, 4000, 8000, 15000, 30000];
 const AUDIO_FETCH_TIMEOUT = 8000;
 
 const md = new MarkdownIt().use(hljs);
@@ -282,6 +285,8 @@ const route = useRoute();
 const router = useRouter();
 const assessmentId = computed(() => String(route.query?.id || ""));
 const recorder = useAudioRecorder();
+const auth = useAuthStore();
+const uploadRetryText = ref("");
 
 const state = ref<InterviewState | null>(null);
 const stage = ref<Stage>("loading");
@@ -365,7 +370,7 @@ const phaseText = computed(() => {
     case "recording":
       return "正在录音，请作答";
     case "uploading":
-      return "正在提交回答";
+      return uploadRetryText.value || "正在提交回答";
     default:
       return "准备中";
   }
@@ -440,19 +445,57 @@ function startCountdown(seconds: number, onTimeout: () => void) {
   }, 1000);
 }
 
-// 带退避重试的上传；网络错误重试，业务错误直接抛出
-async function uploadWithRetry<T>(send: () => Promise<T>): Promise<T> {
+// 带退避重试的上传；网络错误（含服务器重启时的 502/503）自动重试，业务错误直接抛出
+async function uploadWithRetry<T>(send: () => Promise<T>, delays = [1000, 2000]): Promise<T> {
   let lastError: unknown;
-  for (let attempt = 1; attempt <= UPLOAD_ATTEMPTS; attempt++) {
-    try {
-      return await send();
-    } catch (error) {
-      lastError = error;
-      if (!isNetworkError(error) || attempt === UPLOAD_ATTEMPTS) break;
-      await sleep(1000 * 2 ** (attempt - 1));
+  try {
+    for (let attempt = 0; attempt <= delays.length; attempt++) {
+      try {
+        return await send();
+      } catch (error) {
+        lastError = error;
+        if (!isNetworkError(error) || pageOff || attempt === delays.length) break;
+        uploadRetryText.value = `网络不稳定，正在自动重新提交（第 ${attempt + 1} 次）…`;
+        await sleep(delays[attempt]);
+      }
     }
+  } finally {
+    uploadRetryText.value = "";
   }
   throw lastError;
+}
+
+function slotKey(slot: string) {
+  return recordingKey(auth.id || "anon", assessmentId.value, slot);
+}
+
+function answerSlot(index: number, followIndex: number) {
+  return slotKey(`${index}-${followIndex}`);
+}
+
+// 重新进入面试时，当前题位如果有上次没交上去的录音，直接补交，学生不用重答
+async function resumePending(next: InterviewState): Promise<boolean> {
+  if (next.status === "DEFENSE") {
+    const item = await loadPending(slotKey("defense"), "defense");
+    if (!item) return false;
+    state.value = next;
+    stage.value = "defense";
+    message.info("检测到上次没有提交成功的答辩录音，正在补交…");
+    await sendDefense(item.audio);
+    return true;
+  }
+  const current = next.current;
+  if (next.status !== "QUESTIONS" || !current) return false;
+  const item = await loadPending(answerSlot(current.index, current.followIndex || 0), current.content);
+  if (!item) return false;
+  state.value = next;
+  drawingShown = true;
+  stage.value = "question";
+  askedSlotKey = `${current.index}-${current.followIndex || 0}`;
+  questionPhase.value = "uploading";
+  message.info("检测到上次没有提交成功的回答录音，正在补交…");
+  await sendAnswer(current.index, current.followIndex || 0, item.audio);
+  return true;
 }
 
 async function loadStateWithRetry() {
@@ -554,7 +597,8 @@ async function submit() {
   loadingText.value = "正在提交面试，请稍候...";
   busy.value = true;
   try {
-    await uploadWithRetry(() => submitInterview(assessmentId.value));
+    await uploadWithRetry(() => submitInterview(assessmentId.value), UPLOAD_RETRY_DELAYS);
+    clearPending(auth.id || "anon", assessmentId.value);
     goResult();
   } catch (error) {
     finishing = false;
@@ -593,6 +637,7 @@ async function finishDefense() {
   defenseRecording.value = false;
   recordStartedAt.value = 0;
   const audio = await recorder.stop();
+  await savePending(slotKey("defense"), audio, "defense");
   if (recorder.peakLevel.value < SILENCE_PEAK) {
     showSilentRecording(startDefense, () => sendDefense(audio));
     return;
@@ -603,7 +648,8 @@ async function finishDefense() {
 async function sendDefense(audio: Blob) {
   busy.value = true;
   try {
-    const res = await uploadWithRetry(() => uploadDefenseAudio(assessmentId.value, audio));
+    const res = await uploadWithRetry(() => uploadDefenseAudio(assessmentId.value, audio), UPLOAD_RETRY_DELAYS);
+    removePending(slotKey("defense"));
     blocking.value = null;
     applyState(res.data);
   } catch (error) {
@@ -612,7 +658,7 @@ async function sendDefense(audio: Blob) {
     showBlocking(
       "答辩提交失败",
       isNetworkError(error)
-        ? "网络异常，答辩录音尚未提交。录音已保留，请检查网络后点击重试上传。"
+        ? "网络异常，答辩录音尚未提交。录音已保存在本机，刷新页面也不会丢失，请检查网络后点击重试上传。"
         : getErrorMessage(error, "答辩提交失败"),
       isNetworkError(error) ? [retry, redo] : [reloadAction(), redo]
     );
@@ -743,6 +789,7 @@ async function finishAnswer() {
   recordStartedAt.value = 0;
   questionPhase.value = "uploading";
   const audio = await recorder.stop();
+  await savePending(answerSlot(current.index, current.followIndex || 0), audio, current.content);
   if (recorder.peakLevel.value < SILENCE_PEAK) {
     showSilentRecording(
       () => { questionPhase.value = "idle"; startAnswer(); },
@@ -756,9 +803,11 @@ async function finishAnswer() {
 async function sendAnswer(index: number, followIndex: number, audio: Blob) {
   busy.value = true;
   try {
-    const res = await uploadWithRetry(() =>
-      uploadAnswerAudio(assessmentId.value, index, followIndex, audio)
+    const res = await uploadWithRetry(
+      () => uploadAnswerAudio(assessmentId.value, index, followIndex, audio),
+      UPLOAD_RETRY_DELAYS
     );
+    removePending(answerSlot(index, followIndex));
     blocking.value = null;
     questionPhase.value = "idle";
     applyState(res.data);
@@ -775,7 +824,7 @@ async function sendAnswer(index: number, followIndex: number, audio: Blob) {
     showBlocking(
       "回答提交失败",
       isNetworkError(error)
-        ? "网络异常，本题回答尚未提交。录音已保留，请检查网络后点击重试上传。"
+        ? "网络异常，本题回答尚未提交。录音已保存在本机，刷新页面也不会丢失，请检查网络后点击重试上传。"
         : getErrorMessage(error, "回答提交失败"),
       isNetworkError(error) ? [retry, redo] : [reloadAction(), redo]
     );
@@ -813,7 +862,7 @@ function showMicError() {
         run: async () => {
           blocking.value = null;
           await prepareDevices();
-          if (state.value) applyState(state.value);
+          if (state.value && !(await resumePending(state.value))) applyState(state.value);
         },
       },
     ]
@@ -841,6 +890,7 @@ async function bootstrap() {
   }
   state.value = initial;
   if (initial.status === "SUBMITTED") {
+    clearPending(auth.id || "anon", assessmentId.value);
     goResult();
     return;
   }
@@ -853,6 +903,7 @@ async function bootstrap() {
     showMicError();
     return;
   }
+  if (await resumePending(initial)) return;
   applyState(initial);
 }
 
@@ -919,7 +970,7 @@ const phaseKey = computed(() => {
 const statusText = computed(() => {
   if (stage.value !== "defense") return phaseText.value;
   if (defenseRecording.value) return "正在录音，请开始答辩";
-  return busy.value ? "正在提交答辩录音" : "准备好后点击「开始答辩」";
+  return busy.value ? uploadRetryText.value || "正在提交答辩录音" : "准备好后点击「开始答辩」";
 });
 
 function formatSeconds(sec: number) {

@@ -154,6 +154,8 @@ public class AssessmentAppService {
         saveRelationStudent(modifyCmd.getInviteTeachers(), modifyCmd.getId(), teacherId, modifyCmd.getStudentIds(), modifyCmd.getSchoolClassList());
         // 是否分场次由考场页的场次设置决定（ExamSessionService），编辑面试时不改动，避免用打开页面时的旧值覆盖或删除场次
         participatingStudents.setNeedAppoint(null);
+        // 成绩是否公布由考场页的“公布成绩”按钮决定，同样不随编辑面试改动
+        participatingStudents.setShowResult(null);
         questionBankService.saveQuestions(id, modifyCmd.getQuestions());
         publisher.publishEvent(new SettingCreateOrUpdateEvent(OBJECT, participatingStudents));
         return assessmentSettingService.updateById(participatingStudents);

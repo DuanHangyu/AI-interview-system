@@ -149,7 +149,7 @@ function view(item: MyInterview): RowView {
     case "ANALYZING":
       return { kind: "text", hint: "AI 正在生成报告" };
     case "DONE":
-      return item.showResult ? { kind: "report" } : { kind: "text", hint: "已完成，老师未开放报告" };
+      return item.showResult ? { kind: "report" } : { kind: "text", hint: "已完成，成绩待老师公布" };
     default:
       return { kind: "text" };
   }

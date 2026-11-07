@@ -47,6 +47,12 @@ public class ExamController {
         return examSessionService.autoAssign(cmd.getAssessmentId());
     }
 
+    @PostMapping("/show-result")
+    @Operation(summary = "向学生公布或收回成绩报告")
+    public Boolean showResult(@Valid @RequestBody ExamDTO.ShowResultCmd cmd) {
+        return examSessionService.showResult(cmd);
+    }
+
     @GetMapping("/monitor")
     @Operation(summary = "考场监控：全部学生的状态与答题进度")
     public ExamDTO.Monitor monitor(@RequestParam("assessmentId") Integer assessmentId) {
