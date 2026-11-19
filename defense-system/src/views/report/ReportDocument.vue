@@ -26,9 +26,7 @@
       <p class="rp-blue">{{ detail.summary || "暂无整体评价" }}</p>
       <p class="rp-note">
         结论：<b :class="passed ? 'is-pass' : 'is-fail'">{{ passed ? "通过" : "未通过" }}</b>（及格线
-        {{ detail.passScore ?? "—" }} 分）<template v-if="reviewed">
-          。AI 初评 {{ detail.aiScore }} 分，已由{{ detail.review?.reviewerName ? `${detail.review.reviewerName}老师` : "教师" }}复核调整。</template
-        >
+        {{ detail.passScore ?? "—" }} 分）
       </p>
       <template v-if="strengths.length">
         <div class="rp-label">[主要优点]</div>
@@ -47,8 +45,8 @@
         <div class="rp-label">
           [{{ dim.name }}]
           <span class="num">{{ dim.score }}/{{ dim.maxScore ?? "—" }} 分</span>
-          <span v-if="dim.level" class="rp-level num">{{ dim.level }}档</span>
-          <span v-if="dim.score !== dim.aiScore" class="rp-ai num">（AI 初评 {{ dim.aiScore }} 分）</span>
+          <!-- 档次是 AI 按原始分给的，教师调过分的维度不再显示，免得与分数对不上 -->
+          <span v-if="dim.level && dim.score === dim.aiScore" class="rp-level num">{{ dim.level }}档</span>
         </div>
         <p v-if="dim.description" class="rp-blue">{{ dim.description }}</p>
         <p v-if="dim.hitPoints?.length" class="rp-points"><b>已答到：</b>{{ dim.hitPoints.join("；") }}</p>
@@ -92,8 +90,8 @@
           <p class="rp-answer">{{ f.answer || "（未作答）" }}</p>
           <audio v-if="f.answerFile" :src="f.answerFile" controls preload="none" class="rp-audio no-print"></audio>
         </template>
-        <!-- 抽了多道题时逐题列出维度得分；只有一道题时与[分项评分]相同，不重复 -->
-        <template v-if="qa.length > 1 && item.dimensions?.length">
+        <!-- 抽了多道题时逐题列出维度得分；只有一道题时与[分项评分]相同，不重复。逐题分数是 AI 原始分，复核后不再显示 -->
+        <template v-if="qa.length > 1 && item.dimensions?.length && !reviewed">
           <div class="rp-label">[本题评分]</div>
           <p v-for="d in item.dimensions" :key="d.name" class="rp-blue">
             <b>{{ d.name }}</b><span class="num">{{ d.score }}/{{ d.maxScore ?? "—" }} 分</span
@@ -325,11 +323,6 @@ function hasComment(c: { strength?: string | null; weakness?: string | null; sug
 
 .rp-note .is-fail {
   color: var(--rp-red);
-}
-
-.rp-ai {
-  font-weight: 400;
-  color: #666;
 }
 
 .rp-level {

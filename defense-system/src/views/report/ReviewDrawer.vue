@@ -1,7 +1,7 @@
 <template>
   <Drawer :open="open" title="复核评分" :width="520" destroy-on-close @close="emit('update:open', false)">
     <div class="review-tip">
-      调整各维度分数后，最终得分为各维度之和；AI 原始评分会保留在报告中对照展示。
+      调整各维度分数后，最终得分为各维度之和；AI 原始评分只在这里对照显示，报告中只显示复核后的分数。
     </div>
     <div class="review-list">
       <div v-for="dim in rows" :key="dim.name" class="review-row">
